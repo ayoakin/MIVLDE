@@ -2,9 +2,11 @@ import pickle
 import gzip
 import pickletools
 from tqdm.auto import tqdm
-from typing import Dict
+from typing import Dict, Optional
 
+import src
 from src.Keys import Keys
+from src.ModulePathMapper import ModulePathMapper
 from src.activations import collect_activations
 
 from odeformer.model import SymbolicTransformerRegressor
@@ -17,9 +19,9 @@ def _update_bar(bar: tqdm, status: Dict):
 def collect(
     input_path: str, 
     output_path: str, 
-    model_args: dict = None,
+    model_args: Optional[dict] = None,
     keys: Keys = Keys
-):
+) -> None:
     """
     Processes symbolic regression data, extracts activations, filters them using `Keys`,
     and saves the processed activations.
@@ -31,11 +33,9 @@ def collect(
         keys (Keys): An instance of the `Keys` class to filter activations.
     """
 
-    # Load symbolic regression solutions from the input file
     with open(input_path, 'rb') as file:
         solutions = pickle.load(file)
 
-    # Set model hyperparameters if not provided
     model_args = model_args or {
         'beam_size': 20, 
         'beam_temperature': 0.1
@@ -43,6 +43,8 @@ def collect(
 
     model = SymbolicTransformerRegressor(from_pretrained=True)
     model.set_model_args(model_args)
+
+    src.path_mapper = ModulePathMapper(model)
     
     collected_act = []
     
@@ -67,4 +69,5 @@ def collect(
 
     _update_bar(bar, {'Stage': 'Completed'})
     
+
 

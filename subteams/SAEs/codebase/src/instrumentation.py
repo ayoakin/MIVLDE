@@ -1,4 +1,5 @@
 import enum
+from typing import Optional
 
 import torch
 from torch import nn
@@ -17,19 +18,35 @@ class Site(enum.StrEnum):
     )
     MLP_INPUT, MLP_OUTPUT = enum.auto(), enum.auto()
 
-def _tag(module: nn.Module, site: Site, value: torch.Tensor, accessing: str = None) -> torch.Tensor:
-    """Tags a value at a particular site for instrumentation."""
+def _tag(
+    module: nn.Module, 
+    site: Site, 
+    value: torch.Tensor, 
+    accessing: Optional[str] = None
+) -> torch.Tensor:
+    """
+    Tags a value at a particular site for instrumentation.
+    
+    This function is used for tracking values at specific locations in a model.
+    It attempts to switch to a parent greenlet and pass activation data.
+
+    Args:
+        module (nn.Module): The neural network module where the tagging occurs.
+        site (Site): The site in the computation graph being tagged.
+        value (torch.Tensor): The tensor value to be tagged.
+        accessing (str, optional): The specific attribute being accessed. Defaults to None.
+
+    Returns:
+        torch.Tensor: The original or modified tensor value.
+    """
     try:
         parent = safe_greenlet.getparent()
         if parent is None:
             return value
 
-        path = None
-
-        if src.path_mapper is not None:
-            path = src.path_mapper.get_layer_path(module, accessing)
-
+        path = src.path_mapper.get_layer_path(module, accessing) if src.path_mapper else None
         ret = parent.switch((site, value, path))
+
         return ret if ret is not None else value
     except Exception as e:
         print(f"Error in tag at {site}: {e}")
