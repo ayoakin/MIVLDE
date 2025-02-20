@@ -1,12 +1,9 @@
 import os
-import sys
 import pickle
 import gzip
 import pickletools
 import threading
 import contextlib
-
-from queue import Queue
 
 from tqdm.auto import tqdm
 from typing import Dict, Optional, List
@@ -19,61 +16,49 @@ from src.activations import collect_activations
 
 from odeformer.model import SymbolicTransformerRegressor
 
-import numpy as np
-
 # Thread-local storage for model instances
 thread_local = threading.local()
 path_mapper_lock = threading.Lock()
 
-def _get_model(model_args: dict):
+def get_model(model_args: dict):
 
     if not hasattr(thread_local, "model"):
         thread_local.model = SymbolicTransformerRegressor(from_pretrained=True)
-        # thread_local.model.model = thread_local.model.model.to('mps')
         thread_local.model.set_model_args(model_args)
 
-        thread_id = threading.get_ident()
+        thread_id = threading.get_ident()  # Get unique thread ID
         with path_mapper_lock:
             if thread_id not in src.path_mapper:
                 src.path_mapper[thread_id] = ModulePathMapper(thread_local.model)
 
     return thread_local.model
 
-def producer_thread(queue: Queue, batch: List[dict], keys: Keys, batch_index: int, model_args: dict) -> None:
-    model = _get_model(model_args)
-
-    collected_activations = [
-        keys.filter(
-            collect_activations(model, solution['time_points'], solution['solution'])[0]
-        )
-        for solution in batch
-    ]
-
-    queue.put((batch_index, collected_activations))
-
-def consumer_loop(queue: Queue, output_folder: str, total_batches: int):
-    """
-    Read from the queue in a loop.
-    When we have seen total_batches items, we exit.
-    """
-    processed_count = 0
-    while processed_count < total_batches:
-        batch_index, collected_act = queue.get()
-
-        output_path = os.path.join(output_folder, f'batch_{batch_index + 1}.pkl.gz')
-        with gzip.open(output_path, 'wb') as file:
-            file.write(
-                pickletools.optimize(
-                    pickle.dumps(collected_act, protocol=pickle.HIGHEST_PROTOCOL)
-                )
-            )
-        processed_count += 1
-
-        queue.task_done()
 
 def _update_bar(bar: tqdm, status: Dict):
     bar.set_postfix(status)
     bar.display()
+
+def process_batch(batch: List[dict], keys: Keys, batch_index: int, output_folder: str, model_args: dict):
+    model = get_model(model_args)
+    collected_act = []
+    
+    for solution in batch:
+        trajectory = solution['solution']
+        times = solution['time_points']
+
+        fit_activations, _ = collect_activations(model, times, trajectory)
+        fit_activations = keys.filter(fit_activations)
+
+        collected_act.append((solution, fit_activations))
+    
+    pickle_data = pickle.dumps(collected_act, protocol=pickle.HIGHEST_PROTOCOL)
+    optimized_data = pickletools.optimize(pickle_data)
+    
+    output_path = os.path.join(output_folder, f'batch_{batch_index + 1}.pkl.gz')
+    with gzip.open(output_path, 'wb') as file:
+        file.write(optimized_data)
+    
+    return batch_index
 
 def collect(
     input_path: str, 
@@ -99,7 +84,7 @@ def collect(
         os.makedirs(output_folder)
 
     with open(input_path, 'rb') as file:
-        solutions = pickle.load(file)[:500]
+        solutions = pickle.load(file)
 
     src.path_mapper = dict()
 
@@ -110,42 +95,18 @@ def collect(
     
     batch_size = batch_size or len(solutions)
 
-    bar = tqdm(total=len(solutions), desc='Activation Collection', postfix={'Stage': 'Initializing'}, leave=True)
+    bar = tqdm(total=len(solutions), desc='Activation Collection', postfix={'Stage': 'Collecting'}, leave=True)
     
-    queue = Queue(maxsize=20)
-
-    consumer_threads = num_threads // 3
-    total_batches = (len(solutions) + batch_size - 1) // batch_size
-    batches_per_thread = total_batches // consumer_threads
-    remainder = total_batches % consumer_threads
-
-    for i in range(consumer_threads):
-        threading.Thread(
-            target=consumer_loop,
-            args=(queue, output_folder, batches_per_thread + int(i < remainder)),
-            daemon=True
-        ).start()
-
-
-    _update_bar(bar, {'Stage': f'Collection'})
     futures = []
-    counter = 0
-    with (
-        contextlib.redirect_stdout(None),
-        ThreadPoolExecutor(max_workers=num_threads) as producers
-    ):
+    with ThreadPoolExecutor(max_workers=num_threads) as executor, contextlib.redirect_stdout(None):
         for batch_index, i in enumerate(range(0, len(solutions), batch_size)):
             batch = solutions[i:i + batch_size]
-            futures.append(
-                producers.submit(producer_thread, queue, batch, keys, batch_index, model_args)
-            )
+            future = executor.submit(process_batch, batch, keys, batch_index, output_folder, model_args)
+            futures.append(future)
         
         for future in as_completed(futures):
             batch_index = future.result()
-            counter += 1
             bar.update(batch_size)
-            _update_bar(bar, {'Stage': f'Batch [{counter:2d}/{total_batches:2d}] collected'})
+            _update_bar(bar, {'Stage': f'Batch [{batch_index+1:2d}/{(len(solutions) + batch_size - 1) // batch_size:2d}] completed'})
     
-    _update_bar(bar, {'Stage': 'Saving'})
-    queue.join()
     _update_bar(bar, {'Stage': 'Completed'})
