@@ -1,4 +1,3 @@
-import os
 import argparse
 import gzip
 import pickle
@@ -6,7 +5,7 @@ import pickle
 from src.utils import set_random_seed
 from src.instrumentation import install
 from src.Keys import Keys
-from src.collector import collect
+from src.collector_seq import collect
 
 _to_collect = Keys().to_collect.keys()
 
@@ -14,11 +13,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Collect activations for ODEFormer")
     
     parser.add_argument("-i", "--input", type=str, required=True, help="Path to input file")
-    # parser.add_argument("-o", "--output", type=str, required=True, help="Path to output file")
-    parser.add_argument("-o", "--output", type=str, required=True, help="Path to output folder")
-
-    parser.add_argument("--batch_size", type=int, default=0, help="Batch size for processing solutions")
-    parser.add_argument("--num_threads", type=int, default=1, help="Number of threads for parallel processing")
+    parser.add_argument("-o", "--output", type=str, required=True, help="Path to output file")
     
     parser.add_argument("--encoders", nargs="*", type=int, default=[], help="List of encoder layers to keep")
     parser.add_argument("--decoders", nargs="*", type=int, default=[], help="List of decoder layers to keep")
@@ -50,13 +45,11 @@ def main():
             encoder_attn=set(args.encoder_attn),
             cross_attention=args.cross_attention,
             to_collect=to_collect
-        ),
-        num_threads=args.num_threads,
-        batch_size=args.batch_size
+        )
     )
 
     if args.print:
-        with gzip.open(os.path.join(args.output, 'batch_1.pkl.gz'), 'rb') as file:
+        with gzip.open(args.output, 'rb') as file:
             collected_activations = pickle.loads(file.read())
 
         if not collected_activations:

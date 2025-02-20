@@ -1,4 +1,5 @@
 import enum
+import threading
 from typing import Optional
 
 import torch
@@ -44,7 +45,9 @@ def _tag(
         if parent is None:
             return value
 
-        path = src.path_mapper.get_layer_path(module, accessing) if src.path_mapper else None
+        assert src.path_mapper, 'Path Mapper not set!'
+        _path_mapper = src.path_mapper.get(threading.get_ident(), None)
+        path = _path_mapper.get_layer_path(module, accessing) if _path_mapper else None
         ret = parent.switch((site, value, path))
 
         return ret if ret is not None else value
