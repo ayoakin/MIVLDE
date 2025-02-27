@@ -9,7 +9,7 @@ except ModuleNotFoundError as e:
     raise e
 
 class RandomSamplesGenerator():
-  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None): # TODO: add samples path
+  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None): # TODO: update with parameters to specify operators / dimension etc.
     parser = get_parser()
     params = parser.parse_args(args=[])
     self.env = FunctionEnvironment(params)
@@ -55,8 +55,8 @@ class RandomSamplesGenerator():
       sample['feature_dict'] = feature_dict
       return sample
 
-  def generate_random_samples(self, seed=None):
-    seed_gen = np.random.RandomState(seed)
+  def generate_random_samples(self):
+    seed_gen = np.random.RandomState(self.seed)
     for i in range(self.num_samples):
       sample_seed = seed_gen.randint(1_000_000_000)
       # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
@@ -67,7 +67,7 @@ class RandomSamplesGenerator():
       sample = self.identify_features(sample)
 
       # Set filename
-      sample_filename = f"sample_{sample_seed}.pt"
+      sample_filename = f"sample_random_{sample_seed}.pt"
       sample_filepath = os.path.join(self.samples_path, sample_filename)
 
       # Save file using pickle
@@ -75,16 +75,67 @@ class RandomSamplesGenerator():
         pickle.dump(sample, f)
       # print(f"[INFO] Saved to {sample_filepath}")
 
-    print(f"[INFO] Data generation complete. Generated {self.num_samples} samples, saved to {self.samples_path}")
+    print(f"[INFO] Data generation complete. Saved {self.num_samples} samples to {self.samples_path}")
 
 
 class ManualSamplesGenerator():
-  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples'): # TODO: update with more parameters
+  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples'): # TODO: update with more parameters (TBD)
     self.samples_path = samples_path
     os.makedirs(self.samples_path, exist_ok=True)
 
-  def generate_exponential_samples(self):
-    pass # TODO: copy functionality from Axel's notebook
+  def clean_expression(self, expression):
+    # In order to make expressions for equations easier to read
+    cleaned = expression.replace('--', '')
+    cleaned = cleaned.replace(' -', '-')
+    cleaned = cleaned.replace('- ', '-')
+    return cleaned
+
+  def save_generated_samples(self, samples, template='sample_man_'):
+    for idx, sample in enumerate(samples):
+        sample_filename = template + f"{idx}.pt"
+        sample_filepath = os.path.join(self.samples_path, sample_filename)
+        os.makedirs(os.path.dirname(sample_filepath), exist_ok=True)
+        # Save file using pickle
+        with open(sample_filepath, 'wb') as f:
+          pickle.dump(sample, f)
+        # print(f"[INFO] Saved to {sample_filepath}")
+
+  def generate_exponential_samples(self, t_values, c_values, a_values):
+    manual_samples = []
+
+    for c_val in c_values:
+        for a_val in a_values:
+            trajectory = (c_val * np.exp(-a_val * t_values)).reshape(-1, 1)
+            sample_dict = {
+                'times': t_values,
+                'trajectory': trajectory,
+                'a': float(a_val),  # Convert to float for better serialization
+                'c': float(c_val)   # Convert to float for better serialization
+                ,'feature_dict': {"exponential_decay": 1, "hyperbolic": 0}
+                ,'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
+            }
+            manual_samples.append(sample_dict)
+
+    self.save_generated_samples(manual_samples, template='sample_exp_')
+    num_samples = len(c_values) * len(a_values)
+    print(f'[INFO] Data generation complete. Saved {num_samples} exponential samples to {self.samples_path}')
   
-  def generate_hyperbolic_samples(self):
-    pass # TODO: copy functionality from Axel's notebook
+  def generate_hyperbolic_samples(self, t_values, c_values, t0_values):
+    manual_samples = []
+
+    for c_val in c_values:
+        for t0_val in t0_values:
+            trajectory = (c_val / (t0_val - t_values)).reshape(-1, 1)
+            sample_dict = {
+                'times': t_values,
+                'trajectory': trajectory,
+                'a': float(t0_val),  # Convert to float for better serialization
+                'c': float(c_val)   # Convert to float for better serialization
+                ,'feature_dict': {"exponential_decay": 0, "hyperbolic": 1} # TODO: think about how we could make this more general for the future
+                ,'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
+            }
+            manual_samples.append(sample_dict)
+
+    self.save_generated_samples(manual_samples, template='sample_hyp_')
+    num_samples = len(c_values) * len(t0_values)
+    print(f'[INFO] Data generation complete. Saved {num_samples} hyperbolic samples to {self.samples_path}')
