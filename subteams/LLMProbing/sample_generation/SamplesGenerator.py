@@ -9,9 +9,39 @@ except ModuleNotFoundError as e:
     raise e
 
 class RandomSamplesGenerator():
-  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None): # TODO: update with parameters to specify operators / dimension etc.
+
+  '''
+  Generate samples using odeformer's sample generation
+
+  Params:
+  * operators, (id, add, sub, mul, div, abds, inv, sqrt, log, exp, sin, arcsin, cos, arccos, tan, arctan, pow2, pow3)
+  * their relative frequencies,
+  * ode system dimension,
+  * number of samples,
+  * path for saving samples
+
+  Notes:
+
+  1. operator_probability = operator_frequency/sum(frequencies),
+  where the sum is over binary or unary operators. The probabilities appear here in odeformer/envs/generators.py line 411.
+  2. Some operators overlap, e.g. mul can create positive powers, as can pow2 and pow3, while div can create negative powers, as can inv. If you wanted to allow only powers of 2, then don't include mul or pow3 in operators_to_use.
+  3. Including 'pow' in operators_to_use doesn't seem to do anything, e.g. there are no powers in the samples if operators_to_use = "id:1,add:1,pow:1".
+
+  Each sample is a dictionary with entries:
+  1. times,
+  2. trajectory,
+  3. tree_encoded: prefix notation, as list of operators and exact constants
+  4. skeleton_tree_encoded: same as above, but with 'CONSTANT' instead of constants' values
+  5. tree
+  6. skeleton_tree: same as (4) but normal maths expression rather than prefix notation
+  7. infos: number of points, number of unary and binary operators, dimension
+  8. operator_dict: dictionary of which operators the sample includes, from the list 'sin', 'cos', 'arcsin', 'arccos', 'log', 'exp', 'tan', 'arctan'.
+  9. feature_dict: dictionary of which features the sample includes
+
+  '''
+  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None, operators_to_use='id:1,add:1,mul:1', min_dimension=1, max_dimension=1): 
     parser = get_parser()
-    params = parser.parse_args(args=[])
+    params = parser.parse_args(args=["--operators_to_use", operators_to_use, "--min_dimension", str(min_dimension), "--max_dimension", str(max_dimension)])
     self.env = FunctionEnvironment(params)
     self.samples_path = samples_path
     os.makedirs(self.samples_path, exist_ok=True)
@@ -19,17 +49,12 @@ class RandomSamplesGenerator():
     self.seed = seed
 
   def identify_operators(self, sample):
-      operators_real = {
-        "add": 2, "sub": 2, "mul": 2, "div": 2, "abs": 1, "inv": 1, "sqrt": 1,
-        "log": 1, "exp": 1, "sin": 1, "arcsin": 1, "cos": 1, "arccos": 1,
-        "tan": 1, "arctan": 1, "pow2": 1, "pow3": 1, 'id': 1
-      }
-      operators_extra = {"pow": 2}
-      all_operators = {**operators_real, **operators_extra}
+      all_operators = {'sin', 'cos', 'arcsin', 'arccos', 'log', 'exp', 'tan', 'arctan'}
 
       skeleton_tree_encoded = sample['skeleton_tree_encoded']
       operator_dict = {operator: 1 if operator in skeleton_tree_encoded else 0 for operator in all_operators}
       sample['operator_dict'] = operator_dict
+
       return sample
 
   def identify_multiple_features(self, feature_dict, feature_operators, feature_name, operator_dict):
@@ -39,18 +64,27 @@ class RandomSamplesGenerator():
               feature_dict[feature_name] = 0
   
   def identify_features(self, sample):
-      trig_funs = ['sin', 'cos', 'tan']
-      inv_trig_funs = ['arcsin', 'arccos', 'arctan']
-      features_single = ['pow2', 'pow3', 'log', 'sqrt', 'exp']
 
+      # grouped operators to consider as a single feature
+      sin_cos = ['sin', 'cos']
+      arc_sin_cos = ['arcsin', 'arccos']
+      # each of these operators is considered as a feature
+      features_single = ['log', 'exp', 'tan', 'arctan']
+      # each of these operators is checked for in the skeleton_tree representation of the sample, because they don't come uniquely from one operator
+      features_tree_search = {'pow2' : '**2', 'pow3' : '**3', 'inv' : '**-1', 'sqrt' : '**1 * (2)**-1'} # maybe should move these to operator_dict
+
+      skeleton_tree = str(sample['skeleton_tree'])
       operator_dict = sample['operator_dict']
       feature_dict = {}
 
       for feature in features_single:
         feature_dict[feature] = operator_dict[feature]
 
-      self.identify_multiple_features(feature_dict, trig_funs, 'trig', operator_dict)
-      self.identify_multiple_features(feature_dict, inv_trig_funs, 'inv_trig', operator_dict)
+      self.identify_multiple_features(feature_dict, sin_cos, 'sin_cos', operator_dict)
+      self.identify_multiple_features(feature_dict, arc_sin_cos, 'arc_sin_cos', operator_dict)
+
+      for key, value in features_tree_search.items():
+        feature_dict[key] = int(value in skeleton_tree)
 
       sample['feature_dict'] = feature_dict
       return sample
@@ -73,7 +107,6 @@ class RandomSamplesGenerator():
       # Save file using pickle
       with open(sample_filepath, 'wb') as f:
         pickle.dump(sample, f)
-      # print(f"[INFO] Saved to {sample_filepath}")
 
     print(f"[INFO] Data generation complete. Saved {self.num_samples} samples to {self.samples_path}")
 
