@@ -11,9 +11,8 @@ from typing import Dict, Optional, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import src
-from src.Keys import Keys
-from src.ModulePathMapper import ModulePathMapper
-from src.activations import collect_activations
+from src.data import *
+from src.instrumentation import *
 
 from odeformer.model import SymbolicTransformerRegressor
 
@@ -111,7 +110,8 @@ def collect(
     model_args: Optional[dict] = None,
     keys: Keys = Keys,
     num_threads: int = 4,
-    batch_size: int = 10
+    batch_size: int = 10,
+    **kwargs
 ) -> None:
     """
     Processes symbolic regression data in parallel, extracts activations, filters them using `Keys`,
@@ -157,7 +157,7 @@ def collect(
     queue = Queue(maxsize=20)
 
     # Determine the number of consumer threads (1/3rd of num_threads)
-    consumer_threads = num_threads // 3
+    consumer_threads = num_threads // 3 + int(num_threads < 3)
     batches_per_thread = total_batches // consumer_threads
     remainder = total_batches % consumer_threads
 

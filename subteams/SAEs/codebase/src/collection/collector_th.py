@@ -10,9 +10,8 @@ from typing import Dict, Optional, List
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import src
-from src.Keys import Keys
-from src.ModulePathMapper import ModulePathMapper
-from src.activations import collect_activations
+from src.data import *
+from src.instrumentation import *
 
 from odeformer.model import SymbolicTransformerRegressor
 
@@ -66,7 +65,8 @@ def collect(
     model_args: Optional[dict] = None,
     keys: Keys = Keys,
     num_threads: int = 4,
-    batch_size: int = 10
+    batch_size: int = 10,
+    **kwargs
 ) -> None:
     """
     Processes symbolic regression data in parallel, extracts activations, filters them using `Keys`,
