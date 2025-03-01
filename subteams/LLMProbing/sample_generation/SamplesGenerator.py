@@ -142,10 +142,9 @@ class ManualSamplesGenerator():
             sample_dict = {
                 'times': t_values,
                 'trajectory': trajectory,
-                'a': float(a_val),  # Convert to float for better serialization
-                'c': float(c_val)   # Convert to float for better serialization
-                ,'feature_dict': {"exponential": 1, "hyperbolic": 0}
-                ,'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
+                'parameters': {'a': float(a_val), 'c': float(c_val)}, # Convert to float for better serialization
+                'feature_dict': {"exponential": 1, "hyperbolic": 0},
+                'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
             }
             manual_samples.append(sample_dict)
 
@@ -162,8 +161,7 @@ class ManualSamplesGenerator():
             sample_dict = {
                 'times': t_values,
                 'trajectory': trajectory,
-                'a': float(t0_val),  # Convert to float for better serialization
-                'c': float(c_val),   # Convert to float for better serialization
+                'parameters': {'t0': float(t0_val), 'c': float(c_val)}, # Convert to float for better serialization
                 'feature_dict': {"exponential": 0, "hyperbolic": 1}, # TODO: think about how we could make this more general for the future
                 'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
             }
