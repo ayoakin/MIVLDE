@@ -5,11 +5,11 @@ import pickle
 import torch
 from odeformer.metrics import r2_score
 from contextlib import redirect_stdout
+from tqdm import tqdm
 
 class ActivationsExtractor():
-    def __init__(self, dstr, samples_path, activations_path, layers_to_extract=['ffn']): # We currently look at ouputs of ffn layers since they come before layer norm
-        os.makedirs(activations_path, exist_ok=True)
-        self.extract_activations(dstr, samples_path, activations_path, layers_to_extract)
+    def __init__(self):
+        pass
 
     # Function to store the output of each layer
     def hook_fn(self, module, input, output, layer_name, layer_outputs):
@@ -37,7 +37,7 @@ class ActivationsExtractor():
                 layer_name = f"{part_name}_layer_norm2_{idx}"
                 module.register_forward_hook(lambda module, input, output, name=layer_name: self.hook_fn(module, input, output, name, layer_outputs))
 
-    def extract_activations(self, dstr, samples_path, activations_path, layers_to_extract=['ffn']):
+    def extract_activations(self, dstr, samples_path, activations_path, layers_to_extract=['ffn']): # We currently look at ouputs of ffn layers since they come before layer norm
         layer_outputs = {}
         os.makedirs(activations_path, exist_ok=True)
         samples_dir = os.fsencode(samples_path)
@@ -45,14 +45,14 @@ class ActivationsExtractor():
         self.register_hooks(dstr.model.encoder, 'encoder', layer_outputs, layers_to_extract)
         self.register_hooks(dstr.model.decoder, 'decoder', layer_outputs, layers_to_extract)
         
-        for sample in os.listdir(samples_dir):
+        for sample in tqdm(os.listdir(samples_dir), desc='Extracting Activations'):
             # Load sample
             sample_name = os.fsdecode(sample)
             sample_path = os.path.join(samples_path, sample_name)
             with open(sample_path, 'rb') as f:
                 test_sample = pickle.load(f)
             test_id = re.findall(r'\d+', sample_name)[0]
-            print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
+            # print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
 
             # Fit odeformer
             with torch.no_grad():
@@ -98,6 +98,6 @@ class ActivationsExtractor():
             activation_filepath = os.path.join(activations_path, activation_filename)
             with open(activation_filepath, 'wb') as f:
                 pickle.dump(activations, f)
-            print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
+            # print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
 
         print(f'[INFO] Activation extraction complete. Activations saved to {activations_path}')
