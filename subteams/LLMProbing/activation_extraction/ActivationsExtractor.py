@@ -51,7 +51,7 @@ class ActivationsExtractor():
             sample_path = os.path.join(samples_path, sample_name)
             with open(sample_path, 'rb') as f:
                 test_sample = pickle.load(f)
-            test_id = re.findall(r'\d+', sample_name)[0]
+            # test_id = re.findall(r'\d+', sample_name)[0]
             # print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
 
             # Fit odeformer
@@ -95,7 +95,10 @@ class ActivationsExtractor():
               activations['expression'] = test_sample['expression']
 
             # Save activations dict using same id as sample - TODO: determine if there is a smarter way of assigning ids to samples
-            activation_filename = f"activation_{test_id}.pt"
+            # Probably it makes sense to just replace 'sample' with 'activation', e.g. 'sample_exp_0' --> 'activation_exp_0'
+            # Currently it will overwrite files...
+            # activation_filename = f"activation_{test_id}.pt"
+            activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
             activation_filepath = os.path.join(activations_path, activation_filename)
             with open(activation_filepath, 'wb') as f:
                 pickle.dump(activations, f)
