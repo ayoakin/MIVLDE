@@ -72,7 +72,8 @@ class ActivationsExtractor():
             activations = {}
             activations['encoder'] = encoder_layer_outputs
             activations['decoder'] = decoder_layer_outputs
-            activations['operator_dict'] = test_sample['operator_dict']
+            if 'operator_dict' in test_sample:
+                activations['operator_dict'] = test_sample['operator_dict']
             activations['feature_dict'] = test_sample['feature_dict']
             
             # Compute and add R^2 score (this adds a little extra overhead each iteration)
