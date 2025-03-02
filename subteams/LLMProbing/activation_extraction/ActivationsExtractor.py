@@ -1,14 +1,15 @@
 import os
+import io
 import re
 import pickle
 import torch
+from odeformer.metrics import r2_score
+from contextlib import redirect_stdout
 
 class ActivationsExtractor():
-    def __init__(self):
-        pass
-        # TODO: add self.extract_activations with the correct parameters
-        # This will make ActivationsExtractor behaviour consistent with ActivationsDataset and SamplesGenerators
-        # i.e. won't have to call an extra class method
+    def __init__(self, dstr, samples_path, activations_path, layers_to_extract=['ffn']): # We currently look at ouputs of ffn layers since they come before layer norm
+        os.makedirs(activations_path, exist_ok=True)
+        self.extract_activations(dstr, samples_path, activations_path, layers_to_extract)
 
     # Function to store the output of each layer
     def hook_fn(self, module, input, output, layer_name, layer_outputs):
@@ -45,6 +46,7 @@ class ActivationsExtractor():
         self.register_hooks(dstr.model.decoder, 'decoder', layer_outputs, layers_to_extract)
         
         for sample in os.listdir(samples_dir):
+            # Load sample
             sample_name = os.fsdecode(sample)
             sample_path = os.path.join(samples_path, sample_name)
             with open(sample_path, 'rb') as f:
@@ -52,6 +54,7 @@ class ActivationsExtractor():
             test_id = re.findall(r'\d+', sample_name)[0]
             print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
 
+            # Fit odeformer
             with torch.no_grad():
                 dstr.fit(test_sample['times'], test_sample['trajectory'])
             
@@ -60,7 +63,6 @@ class ActivationsExtractor():
             decoder_layer_outputs = {}
             for layer_name, output in layer_outputs.items():
                 if 'ffn' in layer_name: # TODO: may need to change this in future to work with layers_to_extract (if we want it to be more general)
-                # We currently look at ouputs of ffn layers since they come before layer norm
                     if 'encoder' in layer_name:
                         encoder_layer_outputs[layer_name] = output
                     if 'decoder' in layer_name:
@@ -72,15 +74,26 @@ class ActivationsExtractor():
             activations['decoder'] = decoder_layer_outputs
             activations['operator_dict'] = test_sample['operator_dict']
             activations['feature_dict'] = test_sample['feature_dict']
-            # TODO: copute and add R^2 score (this will add extra computational overhead which we will need to test)
-            # TODO: copy the odeformer predicted expression from sample
-            # TODO: copy ground truth expression from sample
-            # if 'tree' in test_sample:
-            #   activations['expression'] = test_sample['tree']
-            # if 'expression' in test_sample:
-            #   activations['expression'] = test_sample['expression']
+            
+            # Compute and add R^2 score (this adds a little extra overhead each iteration)
+            pred_trajectory = dstr.predict(test_sample['times'], test_sample['trajectory'][0])
+            test_r2 = r2_score(test_sample['trajectory'], pred_trajectory)
+            activations['r2_score'] = test_r2
+            
+            # Add the odeformer predicted expression from sample
+            f = io.StringIO()
+            with redirect_stdout(f):
+                dstr.print(n_predictions=1)
+            pred_expression = f.getvalue()
+            activations['pred_expression'] = pred_expression
+            
+            # Add ground truth expression from sample (depending on whether manual or random)
+            if 'tree' in test_sample:
+              activations['expression'] = test_sample['tree']
+            elif 'expression' in test_sample:
+              activations['expression'] = test_sample['expression']
 
-            # Save activations dict using same id as sample
+            # Save activations dict using same id as sample - TODO: determine if there is a smarter way of assigning ids to samples
             activation_filename = f"activation_{test_id}.pt"
             activation_filepath = os.path.join(activations_path, activation_filename)
             with open(activation_filepath, 'wb') as f:
