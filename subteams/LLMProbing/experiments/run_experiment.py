@@ -9,7 +9,7 @@ from src.probes.utils import train_probe, eval_probe, save_probe_to_path
 def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activations_path, \
                                          probe_name, probes_path, \
                                          lr, num_epochs, \
-                                         shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_data=False):
+                                         shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   TODO: add description
   """
@@ -26,9 +26,9 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
 
   # Training loop
   if use_val:
-    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_probe(probe, train_dataloader, lr=lr, write_log=write_data, num_epochs=num_epochs, val_dataloader=val_dataloader)
+    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs, val_dataloader=val_dataloader)
   else:
-    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_probe(probe, train_dataloader, lr=lr, write_log=write_data, num_epochs=num_epochs)
+    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
 
   # Evaluation on test set
   test_loss, test_acc, test_fail_ids = eval_probe(probe, test_dataloader)
@@ -42,8 +42,10 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
   return test_loss, test_acc, test_fail_ids
 
 def separability_testing(target_feature, activations_path, \
+                         probes_path, \
                          lr, num_epochs, \
-                         layers, num_repeats=1):
+                         layers, num_repeats=1, \
+                         shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   TODO: add description
   """
@@ -52,12 +54,16 @@ def separability_testing(target_feature, activations_path, \
   for layer_idx in layers:
     for run in range(num_repeats):
       probe_name = f'probe_{target_feature}_{layer_idx}_{run}.pt'
-      test_loss, test_acc, test_fail_ids = train_and_save_probe_separation_expt(layer_idx, target_feature, lr, num_epochs, probe_name)
+      test_loss, test_acc, test_fail_ids = train_and_save_probe_separation_expt(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
+                                                                                probe_name=probe_name, probes_path=probes_path, \
+                                                                                lr=lr, num_epochs=num_epochs, \
+                                                                                shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
       experiment_data.append({
             "layer": layer_idx,
             "run": run,
             "accuracy": test_acc,
-            "loss": test_loss
+            "loss": test_loss,
+            "fail_ids": test_fail_ids
         })
 
   experiment_data = pd.DataFrame(data=experiment_data)
