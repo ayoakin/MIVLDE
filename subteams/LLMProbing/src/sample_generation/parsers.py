@@ -5,9 +5,12 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-from odeformer.envs import ENVS
-from odeformer.utils import bool_flag
-
+try:
+    from odeformer.envs import ENVS
+    from odeformer.utils import bool_flag
+except ModuleNotFoundError as e:
+    print("[ERROR] Could not import odeformer. Check path and installation.")
+    raise e
 
 def get_parser():
     """

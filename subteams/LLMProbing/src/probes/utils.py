@@ -2,7 +2,7 @@ import torch
 import datetime
 import os
 from tqdm import tqdm
-from .lr_probe import LRProbe
+from src.probes.lr_probe import LRProbe
 
 def eval_probe(probe, dataloader):
   '''
