@@ -93,7 +93,7 @@ class RandomSamplesGenerator():
 
   def generate_random_samples(self):
     seed_gen = np.random.RandomState(self.seed)
-    for i in tqdm(range(self.num_samples)):
+    for i in tqdm(range(self.num_samples), desc='Generating random samples'):
       sample_seed = seed_gen.randint(1_000_000_000)
       # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
       # TODO: May need to set with more care?
@@ -126,7 +126,7 @@ class ManualSamplesGenerator():
     return cleaned
 
   def save_generated_samples(self, samples, template='sample_man_'):
-    for idx, sample in enumerate(samples):
+    for idx, sample in tqdm(enumerate(samples), desc='Saving generated samples'):
         sample_filename = template + f"{idx}.pt"
         sample_filepath = os.path.join(self.samples_path, sample_filename)
         os.makedirs(os.path.dirname(sample_filepath), exist_ok=True)
