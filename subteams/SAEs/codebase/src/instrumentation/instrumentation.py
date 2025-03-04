@@ -19,6 +19,14 @@ class Site(enum.StrEnum):
     )
     MLP_INPUT, MLP_OUTPUT = enum.auto(), enum.auto()
 
+def _get_module_path(
+    module: nn.Module, 
+    accessing: Optional[str] = None
+) -> str:
+    assert src.path_mapper, 'Path Mapper not set!'
+    _path_mapper = src.path_mapper.get(threading.get_ident(), None)
+    return _path_mapper.get_layer_path(module, accessing) if _path_mapper else None
+
 def _tag(
     module: nn.Module, 
     site: Site, 
@@ -45,9 +53,7 @@ def _tag(
         if parent is None:
             return value
 
-        assert src.path_mapper, 'Path Mapper not set!'
-        _path_mapper = src.path_mapper.get(threading.get_ident(), None)
-        path = _path_mapper.get_layer_path(module, accessing) if _path_mapper else None
+        path = _get_module_path(module, accessing)
         ret = parent.switch((site, value, path))
 
         return ret if ret is not None else value
@@ -55,10 +61,11 @@ def _tag(
         print(f"Error in tag at {site}: {e}")
         return value
     
-def install():
+def install_collection():
     """Installs patches for instrumentation."""
     print("Installing patches...", end=' ', flush=True)
-    
+    print(__name__)
+    exit(0)
     PREFIX = f"from {__name__} import Site, _tag as tag"
     
     src.patcher = ast_patcher.ModuleASTPatcher(
@@ -109,3 +116,59 @@ def install():
         print(f"Error installing patches: {e}")
         import traceback
         traceback.print_exc()
+
+
+def _should_inject(
+    module: nn.Module, 
+    accessing: Optional[str] = None
+) -> str:
+    assert src.path_mapper, 'Path Mapper not set!'
+    _path_mapper = src.path_mapper.get(threading.get_ident(), None)
+    return _path_mapper.should_inject(module, accessing) if _path_mapper else False
+
+def _conditional_sae(
+    input: torch.Tensor,
+    module: nn.Module,
+    accessing: Optional[str] = None
+):
+    if not src.sae:
+        raise ValueError("SAE not set!")    
+    
+    sae_instance = src.sae.get(threading.get_ident())
+    if not sae_instance:
+        raise ValueError("SAE not set for the current thread!")
+
+    if not _should_inject(module, accessing):
+        return input
+    
+    return sae_instance(input)
+
+def install_sae():
+    """Installs patches for instrumentation."""
+    print("Installing patches...", end=' ', flush=True)
+    
+    PREFIX = f"from {__name__} import Site, _tag as tag, _conditional_sae as conditional_sae"
+    
+    src.patcher = ast_patcher.ModuleASTPatcher(
+        odeformer.model.transformer,
+        ast_patcher.PatchSettings(prefix=PREFIX),
+        TransformerModel=[
+            "attn = self.attentions[i](tensor, attn_mask, use_cache=use_cache)",
+            "attn = self.attentions[i](conditional_sae(tensor, self, accessing=f'residual{i}'), attn_mask, use_cache=use_cache)",
+        ],
+        TransformerFFN=[
+            "x = self.lin2(x)",
+            "x = self.lin2(conditional_sae(x, self))"
+        ]
+    )
+
+    try:
+        src.patcher.install()
+        print("Patches installed successfully")
+    except Exception as e:
+        print(f"Error installing patches: {e}")
+        import traceback
+        traceback.print_exc()
+
+
+

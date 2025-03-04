@@ -1,3 +1,4 @@
+from typing import Optional, Set
 from dataclasses import dataclass, field
 import torch.nn as nn
 
@@ -11,6 +12,7 @@ class ModulePathMapper:
     """
     model: object  # The model whose module paths need to be mapped
     path_map: dict = field(default_factory=dict)  # Stores module paths by their ID
+    to_inject: Optional[Set] = field(default_factory=set)
 
     def __post_init__(self):
         """
@@ -46,3 +48,6 @@ class ModulePathMapper:
         """
         base_path = self.path_map.get(id(module))
         return f"{base_path}.{accessing_component}" if base_path and accessing_component else base_path
+
+    def should_inject(self, module: nn.Module, accessing_component: str = None) -> str:
+        return self.get_layer_path(module, accessing_component) in self.to_inject

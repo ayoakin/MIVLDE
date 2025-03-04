@@ -36,7 +36,7 @@ def _process_activations(
                 shape: torch.stack(tensors) 
                 for shape, tensors in grouped.items()
             }
-    
+
     return processed
 
 def collect_activations(
