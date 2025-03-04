@@ -46,6 +46,12 @@ class ActivationsDataset(Dataset):
     '''
     Helper function to return the id of the current sample from its path
     '''
+    # act_filename = act_path.split('/')[-1]
+    # act_id = re.findall(r'\d+', act_filename)[0]
+    # return act_id
     act_filename = act_path.split('/')[-1]
-    act_id = re.findall(r'\d+', act_filename)[0]
-    return act_id
+    match = re.match(r'activation_([a-zA-Z]+_\d+)\.pt', act_filename)
+    if match:
+      return match.group(1)
+    else:
+      raise ValueError(f"Activation filename not formatted as expected. Expected format: activation_[descriptor]_[index].pt, Actual format: {act_filename}")
