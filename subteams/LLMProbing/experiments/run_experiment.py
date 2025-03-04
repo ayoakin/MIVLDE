@@ -36,6 +36,7 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
   print(f'Test Set: Loss {test_loss}, Accuracy {test_acc}')
 
   # Save probe
+  os.makedirs(probes_path, exist_ok=True)
   probe_path = os.path.join(probes_path, probe_name)
   save_probe_to_path(probe, probe_path)
 
