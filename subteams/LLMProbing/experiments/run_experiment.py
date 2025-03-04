@@ -39,7 +39,11 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
   probe_path = os.path.join(probes_path, probe_name)
   save_probe_to_path(probe, probe_path)
 
-  return test_loss, test_acc, test_fail_ids
+  final_train_loss = train_losses[-1]
+  final_train_acc = train_accuracies[-1]
+  final_val_loss = val_losses[-1]
+  final_val_acc = val_accuracies[-1]
+  return test_loss, test_acc, test_fail_ids, final_train_loss, final_train_acc, final_val_loss, final_val_acc
 
 def separability_testing(target_feature, activations_path, \
                          probes_path, \
@@ -54,16 +58,21 @@ def separability_testing(target_feature, activations_path, \
   for layer_idx in layers:
     for run in range(num_repeats):
       probe_name = f'probe_{target_feature}_{layer_idx}_{run}.pt'
-      test_loss, test_acc, test_fail_ids = train_and_save_probe_separation_expt(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
-                                                                                probe_name=probe_name, probes_path=probes_path, \
-                                                                                lr=lr, num_epochs=num_epochs, \
-                                                                                shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
+      test_loss, test_acc, test_fail_ids, final_train_loss, final_train_acc, \
+        final_val_loss, final_val_acc = train_and_save_probe_separation_expt(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
+                                                                             probe_name=probe_name, probes_path=probes_path, \
+                                                                             lr=lr, num_epochs=num_epochs, \
+                                                                             shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
       experiment_data.append({
             "layer": layer_idx,
             "run": run,
-            "accuracy": test_acc,
-            "loss": test_loss,
-            "fail_ids": test_fail_ids
+            "test_loss": test_loss,
+            "test_accuracy": test_acc,
+            "test_fail_ids": test_fail_ids,
+            "final_train_loss": final_train_loss,
+            "final_train_accuracy": final_train_acc,
+            "final_val_loss": final_val_loss,
+            "final_val_accuracy": final_val_acc
         })
 
   experiment_data = pd.DataFrame(data=experiment_data)
