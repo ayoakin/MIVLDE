@@ -1,6 +1,8 @@
 import os
 import numpy as np
 import pickle
+from tqdm import tqdm
+from tqdm.contrib import itertools
 try:
     from odeformer.envs.environment import FunctionEnvironment
     from parsers import get_parser
@@ -91,7 +93,7 @@ class RandomSamplesGenerator():
 
   def generate_random_samples(self):
     seed_gen = np.random.RandomState(self.seed)
-    for i in range(self.num_samples):
+    for i in tqdm(range(self.num_samples)):
       sample_seed = seed_gen.randint(1_000_000_000)
       # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
       # TODO: May need to set with more care?
@@ -108,7 +110,7 @@ class RandomSamplesGenerator():
       with open(sample_filepath, 'wb') as f:
         pickle.dump(sample, f)
 
-    print(f"[INFO] Data generation complete. Saved {self.num_samples} samples to {self.samples_path}")
+    print(f"\n[INFO] Data generation complete. Saved {self.num_samples} samples to {self.samples_path}")
 
 
 class ManualSamplesGenerator():
@@ -136,17 +138,18 @@ class ManualSamplesGenerator():
   def generate_exponential_samples(self, t_values, c_values, a_values):
     manual_samples = []
 
-    for c_val in c_values:
-        for a_val in a_values:
-            trajectory = (c_val * np.exp(-a_val * t_values)).reshape(-1, 1)
-            sample_dict = {
-                'times': t_values,
-                'trajectory': trajectory,
-                'parameters': {'a': float(a_val), 'c': float(c_val)}, # Convert to float for better serialization
-                'feature_dict': {"exponential": 1, "hyperbolic": 0},
-                'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
-            }
-            manual_samples.append(sample_dict)
+    # for c_val in c_values:
+    #     for a_val in a_values:
+    for c_val, a_val in itertools.product(c_values, a_values, desc='Generating exponential samples'):
+      trajectory = (c_val * np.exp(-a_val * t_values)).reshape(-1, 1)
+      sample_dict = {
+          'times': t_values,
+          'trajectory': trajectory,
+          'parameters': {'a': float(a_val), 'c': float(c_val)}, # Convert to float for better serialization
+          'feature_dict': {"exponential": 1, "hyperbolic": 0},
+          'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
+      }
+      manual_samples.append(sample_dict)
 
     self.save_generated_samples(manual_samples, template='sample_exp_')
     num_samples = len(c_values) * len(a_values)
@@ -155,18 +158,19 @@ class ManualSamplesGenerator():
   def generate_hyperbolic_samples(self, t_values, c_values, t0_values):
     manual_samples = []
 
-    for c_val in c_values:
-        for t0_val in t0_values:
-            trajectory = (c_val / (t0_val - t_values)).reshape(-1, 1)
-            sample_dict = {
-                'times': t_values,
-                'trajectory': trajectory,
-                'parameters': {'t0': float(t0_val), 'c': float(c_val)}, # Convert to float for better serialization
-                'feature_dict': {"exponential": 0, "hyperbolic": 1}, # TODO: think about how we could make this more general for the future
-                'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
-            }
-            manual_samples.append(sample_dict)
+    # for c_val in c_values:
+    #     for t0_val in t0_values:
+    for c_val, t0_val in itertools.product(c_values, t0_values, desc='Generating hyperbolic samples'):
+      trajectory = (c_val / (t0_val - t_values)).reshape(-1, 1)
+      sample_dict = {
+          'times': t_values,
+          'trajectory': trajectory,
+          'parameters': {'t0': float(t0_val), 'c': float(c_val)}, # Convert to float for better serialization
+          'feature_dict': {"exponential": 0, "hyperbolic": 1}, # TODO: think about how we could make this more general for the future
+          'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
+      }
+      manual_samples.append(sample_dict)
 
     self.save_generated_samples(manual_samples, template='sample_hyp_')
     num_samples = len(c_values) * len(t0_values)
-    print(f'[INFO] Data generation complete. Saved {num_samples} hyperbolic samples to {self.samples_path}')
+    print(f'\n[INFO] Data generation complete. Saved {num_samples} hyperbolic samples to {self.samples_path}')
