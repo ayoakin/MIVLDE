@@ -1,19 +1,23 @@
 # PyTorch model files
-.pt
+*.pt
 
 # Pickle files
-.pkl
+*.pkl
 
 # Gzip files
-.gz
+*.gz
 
 # Jupyter Notebook checkpoints
-.ipynb_checkpoints
-.ipynb_checkpoints
+.ipynb_checkpoints/
+*/.ipynb_checkpoints/*
 
 # Image files
-.png
-.jpg
+*.png
+*.jpg
+
+# Python cache
+__pycache__/
+*.py[cod]
 
 # Streamlit
-.streamlit
+.streamlit/
