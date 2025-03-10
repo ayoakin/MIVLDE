@@ -1,0 +1,19 @@
+# PyTorch model files
+.pt
+
+# Pickle files
+.pkl
+
+# Gzip files
+.gz
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+.ipynb_checkpoints
+
+# Image files
+.png
+.jpg
+
+# Streamlit
+.streamlit
