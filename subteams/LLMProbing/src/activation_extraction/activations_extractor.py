@@ -78,6 +78,7 @@ class ActivationsExtractor():
             
             # Compute and add R^2 score (this adds a little extra overhead each iteration)
             pred_trajectory = dstr.predict(test_sample['times'], test_sample['trajectory'][0])
+            # TODO: if NaN in pred_trajectory, do something else
             test_r2 = r2_score(test_sample['trajectory'], pred_trajectory)
             activations['r2_score'] = test_r2
             
@@ -104,4 +105,4 @@ class ActivationsExtractor():
                 pickle.dump(activations, f)
             # print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
 
-        print(f'[INFO] Activation extraction complete. Activations saved to {activations_path}')
+        print(f'\n[INFO] Activation extraction complete. Activations saved to {activations_path}')
