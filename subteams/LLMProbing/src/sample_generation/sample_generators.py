@@ -41,14 +41,16 @@ class RandomSamplesGenerator():
   9. feature_dict: dictionary of which features the sample includes
 
   '''
-  def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None, operators_to_use='id:1,add:1,mul:1', min_dimension=1, max_dimension=1): 
-    parser = get_parser()
-    params = parser.parse_args(args=["--operators_to_use", operators_to_use, "--min_dimension", str(min_dimension), "--max_dimension", str(max_dimension)])
-    self.env = FunctionEnvironment(params)
-    self.samples_path = samples_path
-    os.makedirs(self.samples_path, exist_ok=True)
-    self.num_samples = num_samples
-    self.seed = seed
+  # def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None, operators_to_use='id:1,add:1,mul:1', min_dimension=1, max_dimension=1): 
+  def __init__(self): 
+    # parser = get_parser()
+    # params = parser.parse_args(args=["--operators_to_use", operators_to_use, "--min_dimension", str(min_dimension), "--max_dimension", str(max_dimension)])
+    # self.env = FunctionEnvironment(params)
+    # self.samples_path = samples_path
+    # os.makedirs(self.samples_path, exist_ok=True)
+    # self.num_samples = num_samples
+    # self.seed = seed
+    pass
 
   def identify_operators(self, sample):
       all_operators = {'sin', 'cos', 'arcsin', 'arccos', 'log', 'exp', 'tan', 'arctan'}
@@ -91,26 +93,31 @@ class RandomSamplesGenerator():
       sample['feature_dict'] = feature_dict
       return sample
 
-  def generate_random_samples(self):
-    seed_gen = np.random.RandomState(self.seed)
-    for i in tqdm(range(self.num_samples), desc='Generating random samples'):
+  def generate_random_samples(self, samples_path, seed=None, num_samples=10, operators_to_use='id:1,add:1,mul:1', min_dimension=1, max_dimension=1, sample_descriptor='random'):
+    os.makedirs(samples_path, exist_ok=True)
+    parser = get_parser()
+    params = parser.parse_args(args=["--operators_to_use", operators_to_use, "--min_dimension", str(min_dimension), "--max_dimension", str(max_dimension)])
+    env = FunctionEnvironment(params)
+
+    seed_gen = np.random.RandomState(seed)
+    for i in tqdm(range(num_samples), desc=f'Generating {sample_descriptor} samples'):
       sample_seed = seed_gen.randint(1_000_000_000)
       # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
       # TODO: May need to set with more care?
-      self.env.rng = np.random.RandomState(sample_seed)
-      sample, errors = self.env.gen_expr(train=True)
+      env.rng = np.random.RandomState(sample_seed)
+      sample, errors = env.gen_expr(train=True)
       sample = self.identify_operators(sample)
       sample = self.identify_features(sample)
 
       # Set filename
-      sample_filename = f"sample_random_{sample_seed}.pt"
-      sample_filepath = os.path.join(self.samples_path, sample_filename)
+      sample_filename = f"sample_{sample_descriptor}_{sample_seed}.pt"
+      sample_filepath = os.path.join(samples_path, sample_filename)
 
       # Save file using pickle
       with open(sample_filepath, 'wb') as f:
         pickle.dump(sample, f)
 
-    print(f"\n[INFO] Data generation complete. Saved {self.num_samples} samples to {self.samples_path}")
+    print(f"\n[INFO] Data generation complete. Saved {num_samples} {sample_descriptor} samples to {samples_path}")
 
 
 class ManualSamplesGenerator():
@@ -153,7 +160,7 @@ class ManualSamplesGenerator():
 
     self.save_generated_samples(manual_samples, template='sample_exp_')
     num_samples = len(c_values) * len(a_values)
-    print(f'[INFO] Data generation complete. Saved {num_samples} exponential samples to {self.samples_path}')
+    print(f'\n[INFO] Data generation complete. Saved {num_samples} exponential samples to {self.samples_path}')
   
   def generate_hyperbolic_samples(self, t_values, c_values, t0_values):
     manual_samples = []
