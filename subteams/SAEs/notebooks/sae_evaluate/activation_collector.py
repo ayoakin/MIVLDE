@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+np.infty=np.inf
 import sys
 import enum
 import strenum
@@ -105,7 +106,7 @@ def _tag(module: torch.nn.Module, site: Site, value: torch.Tensor, accessing: st
         print(f"Error in tag at {site}: {e}")
         return value
 
-def install(odeformer_model):
+def install():
     """Installs the patchers to instrument the model."""
     if not HAS_PATCHING_LIBS:
         print("Cannot install patches - required libraries missing")
@@ -124,7 +125,7 @@ def install(odeformer_model):
                 allow_num_matches_upto={}  # If need to allow multiple matches
             ),
             TransformerModel=[
-                # LayerNorm and attention
+            #   # LayerNorm and attention
                 """            attn = self.attentions[i](tensor, attn_mask, use_cache=use_cache)""",
                 """            attn = tag(self, Site.ATTN_OUTPUT, self.attentions[i](tag(self, Site.RESIDUAL,tensor, accessing="residual"+str(i)), attn_mask, use_cache=use_cache), accessing='attention_layer')""",
             ]
@@ -158,7 +159,7 @@ def collect_activations(model_fn):
     print("\nStarting activation collection")
     activations = {}
 
-    patcher = install(None)  # We don't need the actual model here
+    patcher = install()
     if patcher is None:
         return None, None
 
@@ -179,6 +180,7 @@ def collect_activations(model_fn):
                 raise
 
         glet = safe_greenlet.SafeGreenlet(run_in_greenlet)
+        print(f"Created SafeGreenlet: {glet}")
 
         with glet:
             try:
@@ -256,7 +258,7 @@ def collect_activations_fallback(model, times, trajectories):
 def get_residual_activations(model, solution):
     """
     Get activations from the model for a solution.
-    Uses instrumented collection if available, otherwise falls back to synthetic data.
+    Uses instrumented collection if available, otherwise returns None.
     """
     activations, _ = collect_activations_during_fit(
         model, 
@@ -277,6 +279,5 @@ def get_residual_activations(model, solution):
                     return tensor.numpy()
     
     # If we got here, either activation collection failed or the data structure wasn't as expected
-    # Generate fallback data
-    print("Using synthetic activations")
-    return np.random.randn(100, 256) * 0.1  # Small random values
+    print("No activations collected - instrumentation likely failed")
+    return None

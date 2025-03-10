@@ -1,5 +1,6 @@
 import streamlit as st
 import numpy as np
+np.infty=np.inf
 import matplotlib.pyplot as plt
 import torch
 import sympy as sp
@@ -11,6 +12,9 @@ import time
 import importlib
 from matplotlib.figure import Figure
 import traceback
+
+# Import the activation collector
+from activation_collector import *
 
 # Add needed paths to system path
 st.sidebar.header("Setup")
@@ -89,6 +93,7 @@ if st.sidebar.button("Load Models") or st.session_state.models_loaded:
         
         # Try to load models
         try:
+            install()
             model = load_odeformer_model()
             st.sidebar.success("ODEformer model loaded successfully")
             
@@ -163,8 +168,6 @@ def solve_ho(omega, gamma, y0=np.array([1.0, 1.0]), t=np.linspace(0, 10, 100)):
         }
     return None
 
-# Import the activation collector
-from activation_collector import get_residual_activations
 
 # Function to collect activations
 def collect_activations(model, solution):
@@ -204,31 +207,30 @@ if st.session_state.models_loaded:
         ax1.grid(True)
         st.pyplot(fig1)
         
-        # Collect activations
-        activations = collect_activations(model, solution)
+        # Collect activations with progress indicator
+        with st.spinner("Collecting neural network activations..."):
+            activations = collect_activations(model, solution)
         
-        # Check if we're using real activations
-        if activations is not None and not isinstance(activations, np.ndarray) and not np.all(np.abs(activations) < 0.2):
-            st.session_state.using_real_activations = True
+        # Check if activations were successfully collected
+        if activations is None:
+            st.error("""
+            ### No Activations Collected
+            
+            The instrumentation failed to collect activations from the model. This could be due to:
+            
+            1. Missing required libraries (mishax)
+            2. Incompatible model structure 
+            3. AST patching failed to find matching patterns
+            
+            Check the console output for more details.
+            """)
+            st.stop()  # Stop execution of the app
         
         # Apply SAE
         latent_features = apply_sae(sae_model, activations)
         
         # Feature exploration
         st.subheader("Feature Exploration")
-        
-        # Check if we're using real or synthetic activations
-        using_real_activations = hasattr(st.session_state, 'using_real_activations') and st.session_state.using_real_activations
-        
-        if not using_real_activations:
-            st.warning("""
-            NOTE: The visualizations below may use simplified synthetic activations
-            if the full instrumentation couldn't be loaded. This can happen if the 
-            required patching libraries aren't available.
-            """)
-        else:
-            st.success("Using real model activations from instrumentation.")
-        
         # Create tabs for different visualizations
         tab1, tab2 = st.tabs(["Feature Activations", "Time Point Analysis"])
         
