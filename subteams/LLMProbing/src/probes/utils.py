@@ -80,7 +80,7 @@ def train_probe(probe, train_dataloader, val_dataloader=None, \
     correct_preds = 0
     total_preds = 0
 
-    for i, (train_acts, train_labels) in enumerate(train_dataloader):
+    for i, (train_acts, train_labels, train_fail_ids) in enumerate(train_dataloader):
       # Zero the gradients
       opt.zero_grad()
 
