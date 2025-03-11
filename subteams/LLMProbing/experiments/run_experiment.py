@@ -32,7 +32,7 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
 
   # Evaluation on test set
   test_loss, test_acc, test_fail_ids = eval_probe(probe, test_dataloader)
-  print(f'\nProbe trained on layer {target_layer_idx}:')
+  print(f'Probe trained on layer {target_layer_idx}:')
   print(f'Test Set: Loss {test_loss}, Accuracy {test_acc}')
 
   # Save probe

@@ -74,7 +74,7 @@ def train_probe(probe, train_dataloader, val_dataloader=None, \
     val_accuracies.append(e0_val_acc)
 
   # Main training loop
-  for epoch in tqdm(range(num_epochs), desc='Training LR Probe'):
+  for epoch in tqdm(range(num_epochs), desc='\nTraining LR Probe'):
     probe.train()
     total_loss = 0
     correct_preds = 0
@@ -123,7 +123,7 @@ def train_probe(probe, train_dataloader, val_dataloader=None, \
         if write_log:
           val_f.write(f'Epoch {epoch+1} (Validation): Loss {avg_val_loss}, Accuracy {val_accuracy}\n')
         # print(f' Epoch {epoch+1} (Validation): Loss {avg_val_loss}, Accuracy {val_accuracy.item()}\n')
-  print(f'\nEpoch {epoch+1} (Final): Loss {avg_loss}, Accuracy {accuracy}')
+  print(f'\nTraining Set (Epoch {epoch+1} - Final): Loss {avg_loss}, Accuracy {accuracy}')
 
   return probe, losses, accuracies, val_losses, val_accuracies
 
