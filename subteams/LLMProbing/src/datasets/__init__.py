@@ -4,5 +4,6 @@ TODO: Possibly create a new SamplesDataset class?
 """
 
 from .activations_dataset import ActivationsDataset
+from .samples_dataset import SamplesDataset
 
-__all__ = ["ActivationsDataset"]
+__all__ = ["ActivationsDataset", "SamplesDataset"]
