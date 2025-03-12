@@ -6,6 +6,7 @@ import torch
 from odeformer.metrics import r2_score
 from contextlib import redirect_stdout
 from tqdm import tqdm
+import numpy as np
 
 class ActivationsExtractor():
     def __init__(self):
@@ -49,60 +50,72 @@ class ActivationsExtractor():
             # Load sample
             sample_name = os.fsdecode(sample)
             sample_path = os.path.join(samples_path, sample_name)
-            with open(sample_path, 'rb') as f:
-                test_sample = pickle.load(f)
-            # test_id = re.findall(r'\d+', sample_name)[0]
-            # print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
 
-            # Fit odeformer
-            with torch.no_grad():
-                dstr.fit(test_sample['times'], test_sample['trajectory'])
-            
-            # Get outputs of specified layer parts
-            encoder_layer_outputs = {}
-            decoder_layer_outputs = {}
-            for layer_name, output in layer_outputs.items():
-                if 'ffn' in layer_name: # TODO: may need to change this in future to work with layers_to_extract (if we want it to be more general)
-                    if 'encoder' in layer_name:
-                        encoder_layer_outputs[layer_name] = output
-                    if 'decoder' in layer_name:
-                        decoder_layer_outputs[layer_name] = output
-
-            # Add relevant info to activations dict
-            activations = {}
-            activations['encoder'] = encoder_layer_outputs
-            activations['decoder'] = decoder_layer_outputs
-            if 'operator_dict' in test_sample:
-                activations['operator_dict'] = test_sample['operator_dict']
-            activations['feature_dict'] = test_sample['feature_dict']
-            
-            # Compute and add R^2 score (this adds a little extra overhead each iteration)
-            pred_trajectory = dstr.predict(test_sample['times'], test_sample['trajectory'][0])
-            # TODO: if NaN in pred_trajectory, do something else
-            test_r2 = r2_score(test_sample['trajectory'], pred_trajectory)
-            activations['r2_score'] = test_r2
-            
-            # Add the odeformer predicted expression from sample
-            f = io.StringIO()
-            with redirect_stdout(f):
-                dstr.print(n_predictions=1)
-            pred_expression = f.getvalue()
-            activations['pred_expression'] = pred_expression
-            
-            # Add ground truth expression from sample (depending on whether manual or random)
-            if 'tree' in test_sample:
-              activations['expression'] = test_sample['tree']
-            elif 'expression' in test_sample:
-              activations['expression'] = test_sample['expression']
-
-            # Save activations dict using same id as sample - TODO: determine if there is a smarter way of assigning ids to samples
-            # Probably it makes sense to just replace 'sample' with 'activation', e.g. 'sample_exp_0' --> 'activation_exp_0'
-            # Currently it will overwrite files...
-            # activation_filename = f"activation_{test_id}.pt"
             activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
             activation_filepath = os.path.join(activations_path, activation_filename)
-            with open(activation_filepath, 'wb') as f:
-                pickle.dump(activations, f)
-            # print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
+
+            if not os.path.exists(activation_filepath):
+              print(f"\nProcessing sample: {sample_name}")
+              with open(sample_path, 'rb') as f:
+                  test_sample = pickle.load(f)
+              # test_id = re.findall(r'\d+', sample_name)[0]
+              # print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
+
+              # Fit odeformer
+              with torch.no_grad():
+                  dstr.fit(test_sample['times'], test_sample['trajectory'])
+              
+              # Get outputs of specified layer parts
+              encoder_layer_outputs = {}
+              decoder_layer_outputs = {}
+              for layer_name, output in layer_outputs.items():
+                  if 'ffn' in layer_name: # TODO: may need to change this in future to work with layers_to_extract (if we want it to be more general)
+                      if 'encoder' in layer_name:
+                          encoder_layer_outputs[layer_name] = output
+                      if 'decoder' in layer_name:
+                          decoder_layer_outputs[layer_name] = output
+
+              # Add relevant info to activations dict
+              activations = {}
+              activations['encoder'] = encoder_layer_outputs
+              activations['decoder'] = decoder_layer_outputs
+              if 'operator_dict' in test_sample:
+                  activations['operator_dict'] = test_sample['operator_dict']
+              activations['feature_dict'] = test_sample['feature_dict']
+              
+              # Compute and add R^2 score (this adds a little extra overhead each iteration)
+              pred_trajectory = dstr.predict(test_sample['times'], test_sample['trajectory'][0])
+              if pred_trajectory is None or np.isnan(pred_trajectory).any():
+                print(f'\nnan in trajectory of sample {sample_name}')
+                test_r2 = float('-inf')
+              else:
+                test_r2 = r2_score(test_sample['trajectory'], pred_trajectory)
+              activations['r2_score'] = test_r2
+              
+              # Add the odeformer predicted expression from sample
+              f = io.StringIO()
+              with redirect_stdout(f):
+                  dstr.print(n_predictions=1)
+              pred_expression = f.getvalue()
+              activations['pred_expression'] = pred_expression
+              
+              # Add ground truth expression from sample (depending on whether manual or random)
+              if 'tree' in test_sample:
+                activations['expression'] = test_sample['tree']
+              elif 'expression' in test_sample:
+                activations['expression'] = test_sample['expression']
+
+              # Save activations dict using same id as sample - TODO: determine if there is a smarter way of assigning ids to samples
+              # Probably it makes sense to just replace 'sample' with 'activation', e.g. 'sample_exp_0' --> 'activation_exp_0'
+              # Currently it will overwrite files...
+              # activation_filename = f"activation_{test_id}.pt"
+              activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
+              activation_filepath = os.path.join(activations_path, activation_filename)
+              with open(activation_filepath, 'wb') as f:
+                  pickle.dump(activations, f)
+              # print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
+            else:
+              # File exists, skip processing
+              print(f"\nSkipping sample: {sample_name} (activation file already exists)")
 
         print(f'\n[INFO] Activation extraction complete. Activations saved to {activations_path}')
