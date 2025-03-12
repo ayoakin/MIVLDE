@@ -257,6 +257,20 @@ def solve_fitzhugh_nagumo(a, b, tau, I, y0=np.array([0.0, 0.0]), t=np.linspace(0
         }
     return None
 
+def solve_coupled_linear(alpha, beta, y0=np.array([1.0, 1.0]), t=np.linspace(0, 10, 100)):
+    """Solve the coupled linear system dx/dt = alpha*y, dy/dt = beta*x."""
+    system = "dx/dt = {}*y, dy/dt = {}*x".format(alpha, beta)
+    solution = integrate_ode(y0, t, system)
+    
+    if solution is not None:
+        return {
+            'params': (alpha, beta),
+            'equations': system,
+            'solution': solution,
+            'time_points': t
+        }
+    return None
+
 # Function to collect activations
 def collect_activations(model, solution):
     """Get activations from the model for a given solution"""
@@ -277,8 +291,8 @@ if st.session_state.models_loaded:
     st.sidebar.header("System Selection")
     system_type = st.sidebar.selectbox(
         "Select System Type",
-        ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo"],
-        index=["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo"].index(st.session_state.system_type)
+        ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System"],
+        index=["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System"].index(st.session_state.system_type) if st.session_state.system_type in ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System"] else 0
     )
     st.session_state.system_type = system_type
 
@@ -362,6 +376,18 @@ if st.session_state.models_loaded:
         
         # Create parameters object for current system
         system_params = (a, b, tau, I, v0, w0)
+        
+    elif system_type == "Coupled Linear System":
+        st.sidebar.subheader("Equation Parameters")
+        alpha = st.sidebar.slider("Alpha (α) coefficient", -5.0, 5.0, 1.0, 0.1)
+        beta = st.sidebar.slider("Beta (β) coefficient", -5.0, 5.0, -1.0, 0.1)
+        
+        st.sidebar.subheader("Initial Conditions")
+        x0 = st.sidebar.slider("Initial x value (x₀)", -5.0, 5.0, 1.0, 0.1)
+        y0 = st.sidebar.slider("Initial y value (y₀)", -5.0, 5.0, 0.0, 0.1)
+        
+        # Create parameters object for current system
+        system_params = (alpha, beta, x0, y0)
     
     # Solve the selected system based on parameters
     def solve_selected_system():
@@ -381,6 +407,10 @@ if st.session_state.models_loaded:
         elif system_type == "FitzHugh-Nagumo":
             return solve_fitzhugh_nagumo(a, b, tau, I, 
                                         y0=np.array([v0, w0]), t=times)
+        
+        elif system_type == "Coupled Linear System":
+            return solve_coupled_linear(alpha, beta, 
+                                      y0=np.array([x0, y0]), t=times)
         
         return None
         
@@ -447,6 +477,14 @@ if st.session_state.models_loaded:
         elif system_type == "FitzHugh-Nagumo":
             var1_name = "Membrane Potential (v)"
             var2_name = "Recovery Variable (w)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = None
+            var3 = None
+            
+        elif system_type == "Coupled Linear System":
+            var1_name = "x"
+            var2_name = "y"
             var1 = solution['solution'][:, 0]
             var2 = solution['solution'][:, 1]
             var3_name = None
@@ -580,6 +618,23 @@ if st.session_state.models_loaded:
             ax_phase.set_ylabel(var2_name)
             ax_phase.grid(True)
             ax_phase.set_title("FitzHugh-Nagumo Phase Space")
+            # Mark starting point
+            ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
+            # Mark current time point
+            if time_point < len(var1):
+                ax_phase.plot([var1[time_point]], [var2[time_point]], 'ro', markersize=8, label='Current')
+            ax_phase.legend()
+            st.pyplot(fig_phase)
+            
+        # Special plot for Coupled Linear System - phase space
+        if system_type == "Coupled Linear System":
+            st.subheader("Phase Space Plot")
+            fig_phase, ax_phase = plt.subplots(1, 1, figsize=(8, 8))
+            ax_phase.plot(var1, var2)
+            ax_phase.set_xlabel(var1_name)
+            ax_phase.set_ylabel(var2_name)
+            ax_phase.grid(True)
+            ax_phase.set_title("Coupled Linear System Phase Space")
             # Mark starting point
             ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
             # Mark current time point
@@ -730,6 +785,20 @@ if st.session_state.models_loaded:
                 # Calculate rate of change
                 v_change = v - v**3/3 - w + I
                 st.metric("dv/dt", f"{v_change:.4f}")
+                
+        elif system_type == "Coupled Linear System":
+            x = solution['solution'][time_point, 0]
+            y = solution['solution'][time_point, 1]
+            
+            with m_cols[0]:
+                st.metric("x value", f"{x:.4f}")
+            with m_cols[1]:
+                st.metric("y value", f"{y:.4f}")
+            with m_cols[2]:
+                # Calculate rates of change
+                x_change = alpha * y
+                y_change = beta * x
+                st.metric("dx/dt", f"{x_change:.4f}")
         
         # Show selected feature value in the rightmost column for all system types
         with m_cols[3]:
@@ -878,6 +947,17 @@ if st.session_state.models_loaded:
                         "Activation": f"{values[i]:.4f}",
                         "V": f"{var1_val:.4f}",
                         "W": f"{var2_val:.4f}"
+                    }
+                elif system_type == "Coupled Linear System":
+                    var1_val = solution['solution'][t_idx, 0]  # x
+                    var2_val = solution['solution'][t_idx, 1]  # y
+                    data_entry = {
+                        "Feature": f_idx,
+                        "Time Point": t_idx,
+                        "Time": f"{actual_time:.2f}",
+                        "Activation": f"{values[i]:.4f}",
+                        "X": f"{var1_val:.4f}",
+                        "Y": f"{var2_val:.4f}"
                     }
                 
                 top_activations_data.append(data_entry)
