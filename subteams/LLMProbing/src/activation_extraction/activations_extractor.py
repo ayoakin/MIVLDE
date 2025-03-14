@@ -2,11 +2,12 @@ import os
 import io
 # import re
 import pickle
+import numpy as np
 import torch
 from odeformer.metrics import r2_score
 from contextlib import redirect_stdout
 from tqdm import tqdm
-import numpy as np
+from src.datasets import SamplesDataset
 
 class ActivationsExtractor():
     def __init__(self):
@@ -41,23 +42,28 @@ class ActivationsExtractor():
     def extract_activations(self, dstr, samples_path, activations_path, layers_to_extract=['ffn']): # We currently look at ouputs of ffn layers since they come before layer norm
         layer_outputs = {}
         os.makedirs(activations_path, exist_ok=True)
-        samples_dir = os.fsencode(samples_path)
+        # samples_dir = os.fsencode(samples_path)
+        samples = SamplesDataset(samples_path)
 
         self.register_hooks(dstr.model.encoder, 'encoder', layer_outputs, layers_to_extract)
         self.register_hooks(dstr.model.decoder, 'decoder', layer_outputs, layers_to_extract)
         
-        for sample in tqdm(os.listdir(samples_dir), desc='Extracting Activations'):
+        # for sample in tqdm(os.listdir(samples_dir), desc='Extracting Activations'):
+        for test_sample, test_sample_id in tqdm(samples, desc='Extracting Activations'):
             # Load sample
-            sample_name = os.fsdecode(sample)
-            sample_path = os.path.join(samples_path, sample_name)
+            # sample_name = os.fsdecode(sample)
+            # sample_path = os.path.join(samples_path, sample_name)
 
-            activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
+            # activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
+            activation_filename = f'activation_{test_sample_id}.pt'
             activation_filepath = os.path.join(activations_path, activation_filename)
 
             if not os.path.exists(activation_filepath):
-              print(f"\nProcessing sample: {sample_name}")
-              with open(sample_path, 'rb') as f:
-                  test_sample = pickle.load(f)
+            #   print(f"\nProcessing sample: {sample_name}")
+              print(f"\nProcessing sample: {test_sample_id}")
+            #   with open(sample_path, 'rb') as f:
+            #       test_sample = pickle.load(f)
+
               # test_id = re.findall(r'\d+', sample_name)[0]
               # print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
 
@@ -86,7 +92,8 @@ class ActivationsExtractor():
               # Compute and add R^2 score (this adds a little extra overhead each iteration)
               pred_trajectory = dstr.predict(test_sample['times'], test_sample['trajectory'][0])
               if pred_trajectory is None or np.isnan(pred_trajectory).any():
-                print(f'\nnan in trajectory of sample {sample_name}')
+                # print(f'\nnan in trajectory of sample {sample_name}')
+                print(f'\nnan in trajectory of sample {test_sample_id}')
                 test_r2 = float('-inf')
               else:
                 test_r2 = r2_score(test_sample['trajectory'], pred_trajectory)
@@ -109,13 +116,15 @@ class ActivationsExtractor():
               # Probably it makes sense to just replace 'sample' with 'activation', e.g. 'sample_exp_0' --> 'activation_exp_0'
               # Currently it will overwrite files...
               # activation_filename = f"activation_{test_id}.pt"
-              activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
-              activation_filepath = os.path.join(activations_path, activation_filename)
+              
+            #   activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
+            #   activation_filepath = os.path.join(activations_path, activation_filename)
               with open(activation_filepath, 'wb') as f:
                   pickle.dump(activations, f)
               # print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
             else:
               # File exists, skip processing
-              print(f"\nSkipping sample: {sample_name} (activation file already exists)")
+            #   print(f"\nSkipping sample: {sample_name} (activation file already exists)")
+              print(f"\nSkipping sample: {test_sample_id} (activation file already exists)")
 
         print(f'\n[INFO] Activation extraction complete. Activations saved to {activations_path}')
