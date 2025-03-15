@@ -255,10 +255,18 @@ def collect_activations_fallback(model, times, trajectories):
     
     return dummy_activations, None
 
-def get_residual_activations(model, solution):
+def get_model_activations(model, solution, site_name='RESIDUAL', component='encoder.transformer.residual1'):
     """
-    Get activations from the model for a solution.
-    Uses instrumented collection if available, otherwise returns None.
+    Get activations from the model for a given solution and specific site/component.
+    
+    Args:
+        model: The model to collect activations from
+        solution: The solution dictionary containing time_points and solution
+        site_name: The activation site name (e.g., 'RESIDUAL', 'ATTN_OUTPUT')
+        component: The component path (e.g., 'encoder.transformer.residual1')
+        
+    Returns:
+        Tuple of (all_activations, specific_activations_array)
     """
     activations, _ = collect_activations_during_fit(
         model, 
@@ -266,18 +274,30 @@ def get_residual_activations(model, solution):
         solution['solution']
     )
     
-    if activations and 'RESIDUAL' in activations:
-        if 'encoder.transformer.residual1' in activations['RESIDUAL']:
-            shapes = list(activations['RESIDUAL']['encoder.transformer.residual1'].keys())
-            if shapes:
-                tensor_list = activations['RESIDUAL']['encoder.transformer.residual1'][shapes[0]]
-                if tensor_list:
-                    # Return the first activation tensor
-                    tensor = tensor_list[0]
-                    if tensor.dim() == 3:
-                        return tensor[0].numpy()  # Extract batch dim
-                    return tensor.numpy()
+    # Store all collected activations for inspection and selection
+    if activations:
+        # Return the activations for the requested site and component
+        if site_name in activations:
+            if component in activations[site_name]:
+                shapes = list(activations[site_name][component].keys())
+                if shapes:
+                    tensor_list = activations[site_name][component][shapes[0]]
+                    if tensor_list:
+                        # Return the first activation tensor
+                        tensor = tensor_list[0]
+                        if tensor.dim() == 3:
+                            return activations, tensor[0].numpy()  # Extract batch dim
+                        return activations, tensor.numpy()
     
     # If we got here, either activation collection failed or the data structure wasn't as expected
-    print("No activations collected - instrumentation likely failed")
-    return None
+    print(f"No activations collected for {site_name}.{component}")
+    return activations, None
+
+def get_residual_activations(model, solution):
+    """
+    Get activations from the model for a solution.
+    Uses instrumented collection if available, otherwise returns None.
+    This is maintained for backwards compatibility.
+    """
+    _, activations = get_model_activations(model, solution)
+    return activations
