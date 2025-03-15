@@ -66,6 +66,22 @@ if 'feature_idx' not in st.session_state:
     st.session_state.feature_idx = 727
 if 'system_type' not in st.session_state:
     st.session_state.system_type = "Harmonic Oscillator"
+if 'current_sae_path' not in st.session_state:
+    st.session_state.current_sae_path = None
+# New session state variables for activation selection
+if 'activation_site' not in st.session_state:
+    st.session_state.activation_site = 'RESIDUAL'
+if 'activation_component' not in st.session_state:
+    st.session_state.activation_component = 'encoder.transformer.residual1'
+if 'all_collected_activations' not in st.session_state:
+    st.session_state.all_collected_activations = None
+if 'sae_paths' not in st.session_state:
+    st.session_state.sae_paths = {
+        "Residual Layer 1": "../sae/sae.encoder.outer.residual1_20250308_230626/checkpoints/sae_best_encoder.outer.residual1.pt",
+        "Residual Layer 2": "../sae/sae.encoder.outer.residual2_20250309_122318/checkpoints/sae_best_encoder.outer.residual2.pt",
+        "Residual Layer 3": "../sae/sae.encoder.outer.residual3_20250309_213613/checkpoints/sae_best_encoder.outer.residual3.pt",
+        "Custom Path": ""
+    }
     
 # Try to import mishax for instrumentation
 mishax_available = False
@@ -117,16 +133,37 @@ if st.sidebar.button("Load Models") or st.session_state.models_loaded:
             model = load_odeformer_model()
             st.sidebar.success("ODEformer model loaded successfully")
             
-            # SAE model loading
-            sae_path = st.sidebar.text_input(
-                "SAE Model Path", 
-                "../sae/sae.encoder.outer.residual1_20250308_230626/checkpoints/sae_best_encoder.outer.residual1.pt"
+            # SAE model selection
+            st.sidebar.subheader("SAE Model Selection")
+            sae_option = st.sidebar.selectbox(
+                "Select SAE Model",
+                list(st.session_state.sae_paths.keys()),
+                index=0
             )
-            
+
+            # If custom path is selected, show text input
+            if sae_option == "Custom Path":
+                custom_path = st.sidebar.text_input("Custom SAE Path", 
+                                                  value=st.session_state.sae_paths["Custom Path"])
+                st.session_state.sae_paths["Custom Path"] = custom_path
+                sae_path = custom_path
+            else:
+                sae_path = st.session_state.sae_paths[sae_option]
+                
+            # Display the selected path for reference
+            st.sidebar.caption(f"Path: {sae_path}")
+
             if Path(sae_path).exists():
                 sae_model = load_sae_model(sae_path)
                 st.sidebar.success("SAE model loaded successfully")
                 st.session_state.models_loaded = True
+                
+                # Check if SAE model changed and clear cached data if needed
+                if st.session_state.current_sae_path != sae_path:
+                    st.session_state.current_sae_path = sae_path
+                    st.session_state.current_latent_features = None
+                    st.session_state.current_activations = None
+                    st.sidebar.info("SAE model changed - cache cleared")
             else:
                 st.sidebar.error(f"SAE model not found at {sae_path}")
                 
@@ -140,6 +177,84 @@ if st.sidebar.button("Load Models") or st.session_state.models_loaded:
     
     except Exception as e:
         st.sidebar.error(f"Error loading models: {str(e)}")
+
+# Add activation selection UI to the sidebar
+if st.session_state.models_loaded:
+    st.sidebar.header("Activation Settings")
+    
+    # If we've collected activations before, get the available sites
+    available_sites = []
+    if st.session_state.all_collected_activations:
+        # Convert site keys to strings to ensure compatibility
+        available_sites = [str(site) for site in st.session_state.all_collected_activations.keys()]
+    
+    # If no activations collected yet, use only the known available sites
+    if not available_sites:
+        available_sites = ['RESIDUAL', 'ATTN_OUTPUT']
+    
+    # Site selection dropdown
+    site_index = 0
+    if st.session_state.activation_site in available_sites:
+        site_index = available_sites.index(st.session_state.activation_site)
+        
+    selected_site = st.sidebar.selectbox(
+        "Activation Site", 
+        available_sites,
+        index=site_index
+    )
+    
+    # Component selection dropdown - only show components that exist for this site
+    available_components = []
+    
+    if st.session_state.all_collected_activations:
+        # Find the matching site key - handle both string and enum cases
+        matching_site_key = None
+        for site_key in st.session_state.all_collected_activations.keys():
+            if str(site_key) == selected_site:
+                matching_site_key = site_key
+                break
+        
+        if matching_site_key is not None:
+            # Get available components for this site
+            available_components = list(st.session_state.all_collected_activations[matching_site_key].keys())
+    
+    # If no components are available for this site, show an empty component dropdown
+    component_index = 0
+    component_disabled = False
+    
+    if not available_components:
+        available_components = ["No components available for this site"]
+        component_disabled = True
+    elif st.session_state.activation_component in available_components:
+        component_index = available_components.index(st.session_state.activation_component)
+        
+    selected_component = st.sidebar.selectbox(
+        "Component", 
+        available_components,
+        index=component_index,
+        disabled=component_disabled
+    )
+    
+    # Only enable custom component input if we're not showing a placeholder
+    use_custom = False
+    if not component_disabled:
+        use_custom = st.sidebar.checkbox("Use custom component", False)
+    
+    if use_custom:
+        custom_component = st.sidebar.text_input("Custom Component", st.session_state.activation_component)
+        selected_component = custom_component
+    
+    # Check if selection changed (don't update if we're in the disabled state)
+    if (not component_disabled and
+        (selected_site != st.session_state.activation_site or 
+        selected_component != st.session_state.activation_component)):
+        # Update session state
+        st.session_state.activation_site = selected_site
+        st.session_state.activation_component = selected_component
+        # Clear cached activations and features
+        st.session_state.current_activations = None
+        st.session_state.current_latent_features = None
+        st.sidebar.info("Activation selection changed - recollecting activations")
 
 # ODE system functions
 def parse_system(system):
@@ -187,7 +302,7 @@ def solve_ho(omega, gamma, y0=np.array([1.0, 1.0]), t=np.linspace(0, 10, 100)):
     
     if solution is not None:
         return {
-            'params': (omega, gamma),
+            'params': (omega, gamma, y0[0], y0[1]),  # Include initial conditions in params
             'equations': system,
             'solution': solution,
             'time_points': t
@@ -236,7 +351,7 @@ def solve_lotka_volterra(alpha, beta, delta, gamma, y0=np.array([1.0, 0.5]), t=n
     
     if solution is not None:
         return {
-            'params': (alpha, beta, delta, gamma),
+            'params': (alpha, beta, delta, gamma, y0[0], y0[1]),  # Include initial conditions in params
             'equations': system,
             'solution': solution,
             'time_points': t
@@ -250,7 +365,7 @@ def solve_fitzhugh_nagumo(a, b, tau, I, y0=np.array([0.0, 0.0]), t=np.linspace(0
     
     if solution is not None:
         return {
-            'params': (a, b, tau, I),
+            'params': (a, b, tau, I, y0[0], y0[1]),  # Include initial conditions in params
             'equations': system,
             'solution': solution,
             'time_points': t
@@ -259,22 +374,59 @@ def solve_fitzhugh_nagumo(a, b, tau, I, y0=np.array([0.0, 0.0]), t=np.linspace(0
 
 def solve_coupled_linear(alpha, beta, y0=np.array([1.0, 1.0]), t=np.linspace(0, 10, 100)):
     """Solve the coupled linear system dx/dt = alpha*y, dy/dt = beta*x."""
-    system = "dx/dt = {}*y, dy/dt = {}*x".format(alpha, beta)
-    solution = integrate_ode(y0, t, system)
     
-    if solution is not None:
+    # Define the system function directly (bypassing the parser which may have issues with negatives)
+    def system_fn(t, y):
+        return [alpha * y[1], beta * y[0]]
+    
+    try:
+        sol = scipy.integrate.solve_ivp(
+            system_fn,
+            (min(t), max(t)),
+            y0,
+            t_eval=t
+        )
+        
         return {
-            'params': (alpha, beta),
-            'equations': system,
-            'solution': solution,
+            'params': (alpha, beta, y0[0], y0[1]),  # Include initial conditions in params
+            'equations': f"dx/dt = {alpha}*y, dy/dt = {beta}*x",
+            'solution': sol.y.T,
             'time_points': t
         }
-    return None
+    except Exception as e:
+        print(f"Error solving coupled linear system: {e}")
+        return None
 
-# Function to collect activations
-def collect_activations(model, solution):
-    """Get activations from the model for a given solution"""
-    return get_residual_activations(model, solution)
+# Function to get activations for the currently selected site and component
+def get_activations(model, solution):
+    """Get activations for the currently selected site and component"""
+    site_name = st.session_state.activation_site
+    component = st.session_state.activation_component
+    
+    all_activations, activations = get_model_activations(
+        model, solution, site_name=site_name, component=component
+    )
+    
+    # Store all collected activations for component selection
+    if all_activations:
+        st.session_state.all_collected_activations = all_activations
+        
+        # Print info about collected activations to debug
+        print(f"Collection complete. Found sites: {list(all_activations.keys())}")
+        for site in all_activations:
+            print(f"Site '{site}' has components: {list(all_activations[site].keys())}")
+    
+    # If collection failed with the selected site/component, try the defaults
+    if activations is None and (site_name != 'RESIDUAL' or component != 'encoder.transformer.residual1'):
+        st.warning(f"Failed to collect activations for {site_name}.{component}. Trying defaults.")
+        _, activations = get_model_activations(model, solution)
+        
+        if activations is not None:
+            # Update session state to reflect the actual values used
+            st.session_state.activation_site = 'RESIDUAL'
+            st.session_state.activation_component = 'encoder.transformer.residual1'
+    
+    return activations
 
 # Function to process activation through SAE
 def apply_sae(sae_model, activations):
@@ -492,9 +644,9 @@ if st.session_state.models_loaded:
         
         # Collect activations only if needed
         if st.session_state.current_activations is None:
-            with st.spinner("Collecting neural network activations..."):
+            with st.spinner(f"Collecting neural network activations for {st.session_state.activation_site}.{st.session_state.activation_component}..."):
                 model = st.session_state.model
-                activations = collect_activations(model, solution)
+                activations = get_activations(model, solution)
                 st.session_state.current_activations = activations
         else:
             activations = st.session_state.current_activations
@@ -807,13 +959,41 @@ if st.session_state.models_loaded:
         # Raw activations option
         show_raw = st.checkbox("Show raw activations", False)
         if show_raw:
-            fig_raw, ax_raw = plt.subplots(1, 1, figsize=(12, 3))  # Full width
-            ax_raw.plot(activations[time_point])
-            ax_raw.set_xlabel('Neuron Index')
-            ax_raw.set_ylabel('Activation Value')
-            ax_raw.set_title(f'Raw Activations')
-            ax_raw.grid(True)
-            st.pyplot(fig_raw)
+            # Add tabs for raw activations and activation explorer
+            tab1, tab2 = st.tabs(["Raw Activations", "Activation Explorer"])
+            
+            with tab1:
+                fig_raw, ax_raw = plt.subplots(1, 1, figsize=(12, 3))  # Full width
+                ax_raw.plot(activations[time_point])
+                ax_raw.set_xlabel('Neuron Index')
+                ax_raw.set_ylabel('Activation Value')
+                ax_raw.set_title(f'Raw Activations at Time Point {time_point} for {st.session_state.activation_site}.{st.session_state.activation_component}')
+                ax_raw.grid(True)
+                st.pyplot(fig_raw)
+                
+            with tab2:
+                # Add activation explorer
+                if st.session_state.all_collected_activations:
+                    st.markdown("### Available Activation Sites and Components")
+                    
+                    # Create an expandable section for each site
+                    for site in st.session_state.all_collected_activations:
+                        components = list(st.session_state.all_collected_activations[site].keys())
+                        with st.expander(f"Site: {site} ({len(components)} components)"):
+                            for comp in components:
+                                shapes = list(st.session_state.all_collected_activations[site][comp].keys())
+                                shape_str = ", ".join([str(s) for s in shapes])
+                                st.markdown(f"**{comp}**: Shapes: {shape_str}")
+                                
+                                # Add a button to select this site/component
+                                col1, col2 = st.columns([3, 1])
+                                with col2:
+                                    if st.button("Select", key=f"select_{site}_{comp}"):
+                                        st.session_state.activation_site = str(site)
+                                        st.session_state.activation_component = comp
+                                        st.session_state.current_activations = None
+                                        st.session_state.current_latent_features = None
+                                        st.experimental_rerun()
         
         # Top features bar chart
         st.markdown("### Top Features at Selected Time Point")
@@ -1007,8 +1187,12 @@ st.sidebar.info(f"""
 This app allows you to explore how neural network features respond to different dynamical systems.
 
 **Current System**: {st.session_state.get('system_type', 'None')}
+**Current Activation**: {st.session_state.get('activation_site', 'None')}.{st.session_state.get('activation_component', 'None')}
+**Current SAE Layer**: {list(st.session_state.sae_paths.keys())[list(st.session_state.sae_paths.values()).index(st.session_state.current_sae_path)] if st.session_state.current_sae_path in st.session_state.sae_paths.values() else 'Custom'}
 
 1. Use the sidebar to select a system and adjust parameters
-2. Explore feature activations at specific time points
-3. Analyze patterns in the neural network representations
+2. Choose SAE model for different layers
+3. Choose activation sites and components to analyze
+4. Explore feature activations at specific time points
+5. Analyze patterns in the neural network representations
 """)
