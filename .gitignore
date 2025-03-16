@@ -2,3 +2,14 @@ venv/
 __pycache__/
 
 odeformer.pt
+
+odeformer_windows.ipynb
+
+all_intermediate_tokens.json
+all_stored_attentions.json
+all_topk.json
+
+plot_token_charts.txt
+store_attentions.txt
+ignore_enc_layers.txt
+topk.txt
