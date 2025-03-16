@@ -32,8 +32,7 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
 
   # Evaluation on test set
   test_loss, test_acc, test_fail_ids = eval_probe(probe, test_dataloader)
-  print(f'Probe trained on layer {target_layer_idx}:')
-  print(f'Test Set: Loss {test_loss}, Accuracy {test_acc}')
+  print(f'Probe trained on layer {target_layer_idx}: Test Set Loss {test_loss}, Test Set Accuracy {test_acc}')
 
   # Save probe
   os.makedirs(probes_path, exist_ok=True)
@@ -58,6 +57,7 @@ def separability_testing(target_feature, activations_path, \
 
   for layer_idx in layers:
     for run in range(num_repeats):
+      print(f'Repeat {run} of layer {layer_idx}')
       probe_name = f'probe_{target_feature}_{layer_idx}_{run}.pt'
       test_loss, test_acc, test_fail_ids, final_train_loss, final_train_acc, \
         final_val_loss, final_val_acc = train_and_save_probe_separation_expt(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
