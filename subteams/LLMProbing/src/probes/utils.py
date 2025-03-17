@@ -58,7 +58,7 @@ def eval_regression_probe(probe, dataloader):
     avg_loss = total_loss / total_preds
     return avg_loss
 
-def train_probe(probe, train_dataloader, val_dataloader=None, \
+def train_classifier_probe(probe, train_dataloader, val_dataloader=None, \
                 lr=0.01, num_epochs=20, device='cpu', \
                 logs_path='/content/drive/MyDrive/aisc/logs', write_log=False): # TODO: determine if default hyperparameters are good
   '''

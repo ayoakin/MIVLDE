@@ -4,7 +4,7 @@ from torch.utils.data import DataLoader
 from src.datasets.activations_dataset import ActivationsDataset
 from src.datasets.utils import split_dataset, get_d_in
 from src.probes.lr_probe import LRProbe
-from src.probes.utils import train_probe, eval_probe, save_probe_to_path
+from src.probes.utils import train_classifier_probe, train_regression_probe, eval_classifier_probe, save_probe_to_path
 
 def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activations_path, \
                                          probe_name, probes_path, \
@@ -26,12 +26,12 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
 
   # Training loop
   if use_val:
-    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs, val_dataloader=val_dataloader)
+    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs, val_dataloader=val_dataloader)
   else:
-    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
+    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
 
   # Evaluation on test set
-  test_loss, test_acc, test_fail_ids = eval_probe(probe, test_dataloader)
+  test_loss, test_acc, test_fail_ids = eval_classifier_probe(probe, test_dataloader)
   print(f'Probe trained on layer {target_layer_idx}: Test Set Loss {test_loss}, Test Set Accuracy {test_acc}')
 
   # Save probe
