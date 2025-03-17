@@ -4,7 +4,7 @@ import os
 from tqdm import tqdm
 from src.probes.lr_probe import LRProbe
 
-def eval_probe(probe, dataloader):
+def eval_classifier_probe(probe, dataloader):
   '''
   Evaluate a given probe on a specified dataset (via its corresponding dataloader)
   '''
@@ -36,6 +36,27 @@ def eval_probe(probe, dataloader):
     accuracy = (correct / total_preds).item()
     avg_loss = total_loss / total_preds
     return avg_loss, accuracy, fail_ids
+  
+def eval_regression_probe(probe, dataloader):
+  '''
+  Evaluate a given regression probe (e.g. for predicting R^2 score) on a specified dataset (via its corresponding dataloader)
+  '''
+  with torch.no_grad():
+    total_loss = 0
+    # criterion = torch.nn.MSELoss()
+
+    probe.eval()
+
+    for acts, labels, ids in dataloader:
+      outputs = probe(acts)
+      # loss = criterion(outputs, labels)
+      diff = (labels - outputs).item()
+      total_loss += torch.square(diff).sum()
+
+      total_preds += len(labels)
+
+    avg_loss = total_loss / total_preds
+    return avg_loss
 
 def train_probe(probe, train_dataloader, val_dataloader=None, \
                 lr=0.01, num_epochs=20, device='cpu', \
@@ -65,11 +86,11 @@ def train_probe(probe, train_dataloader, val_dataloader=None, \
   val_accuracies = []
 
   # Epoch 0 (for comparison against epoch 1)
-  e0_train_loss, e0_train_acc, e0_train_fail_ids = eval_probe(probe, train_dataloader)
+  e0_train_loss, e0_train_acc, e0_train_fail_ids = eval_classifier_probe(probe, train_dataloader)
   losses.append(e0_train_loss)
   accuracies.append(e0_train_acc)
   if val_dataloader is not None:
-    e0_val_loss, e0_val_acc, e0_val_fail_ids = eval_probe(probe, val_dataloader)
+    e0_val_loss, e0_val_acc, e0_val_fail_ids = eval_classifier_probe(probe, val_dataloader)
     val_losses.append(e0_val_loss)
     val_accuracies.append(e0_val_acc)
 
@@ -115,7 +136,7 @@ def train_probe(probe, train_dataloader, val_dataloader=None, \
     # Run evaluation on validation set
     # TODO: maybe implement early stopping? Need to test on larger dataset
     if val_dataloader is not None:
-        avg_val_loss, val_accuracy, val_fail_ids = eval_probe(probe, val_dataloader)
+        avg_val_loss, val_accuracy, val_fail_ids = eval_classifier_probe(probe, val_dataloader)
 
         val_losses.append(avg_val_loss)
         val_accuracies.append(val_accuracy)
