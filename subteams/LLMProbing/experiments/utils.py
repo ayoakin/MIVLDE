@@ -4,6 +4,9 @@ import seaborn as sns
 sns.set_theme()
 
 def summarise_experiment(experiment_data):
+    """
+    TODO: add description
+    """
     experiment_summary = experiment_data.groupby("layer").agg(
         accuracy_mean=("test_accuracy", "mean"),
         accuracy_std=("test_accuracy", "std"),
@@ -14,9 +17,14 @@ def summarise_experiment(experiment_data):
     return experiment_summary
 
 def plot_from_summary(experiment_summary, descriptor, in_notebook=True, fig_dir='plots/'):
-    fig, ax = plt.subplots(figsize=(8,4))
-    ax.errorbar(experiment_summary['layer'], experiment_summary['accuracy_mean'], yerr=experiment_summary['accuracy_std'], marker='x')
-    ax.set(title='Probe test accuracy over layers', xlabel='Layer index', ylabel='Mean accuracy on test set')
+    """
+    TODO: add description
+    """
+    fig, ax = plt.subplots(2, figsize=(8,4))
+    ax[0].errorbar(experiment_summary['layer'], experiment_summary['accuracy_mean'], yerr=experiment_summary['accuracy_std'], marker='x')
+    ax[0].set(title='Probe test accuracy over layers', xlabel='Layer index', ylabel='Mean accuracy on test set')
+    ax[1].errorbar(experiment_summary['layer'], experiment_summary['loss_mean'], yerr=experiment_summary['loss_std'], marker='x')
+    ax[1].set(title='Probe test loss over layers', xlabel='Layer index', ylabel='Mean loss on test set')
     if in_notebook:
         plt.show()
     else:
