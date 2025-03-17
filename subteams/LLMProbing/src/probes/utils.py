@@ -148,6 +148,78 @@ def train_probe(probe, train_dataloader, val_dataloader=None, \
 
   return probe, losses, accuracies, val_losses, val_accuracies
 
+def train_regression_probe(probe, train_dataloader, val_dataloader=None, \
+                           lr=0.01, num_epochs=20, device='cpu', \
+                           logs_path='/content/drive/MyDrive/aisc/logs', write_log=False):
+  # Use Adam optimizer for now
+  # TODO: investigate adding learning rate scheduler (e.g. cosine annealing?)
+  opt = torch.optim.Adam(probe.parameters(), lr=lr, weight_decay=1e-3)
+  # TODO: investigate if weight decay is actually necessary
+  criterion = torch.nn.MSELoss()
+
+  # Open log files to write to if desired
+  # Include the current time of the experiment in filename to avoid collisions
+  today_str = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M')
+  if write_log:
+    train_f = open(os.path.join(logs_path, f'{today_str}_train_acc_per_epoch.txt'), 'w')
+    train_f.write(f'Learning rate: {lr}, Num. epochs: {num_epochs}\n')
+    if val_dataloader is not None:
+      val_f = open(os.path.join(logs_path, f'{today_str}_val_acc_per_epoch.txt'), 'w')
+      val_f.write(f'Learning rate: {lr}, Num. epochs: {num_epochs}\n')
+
+  losses = []
+  val_losses = []
+
+  # Epoch 0 (for comparison against epoch 1)
+  e0_train_loss = eval_regression_probe(probe, train_dataloader)
+  losses.append(e0_train_loss)
+  if val_dataloader is not None:
+    e0_val_loss = eval_regression_probe(probe, val_dataloader)
+    val_losses.append(e0_val_loss)
+
+  # Main training loop
+  for epoch in tqdm(range(num_epochs), desc='\nTraining LR Probe'):
+    probe.train()
+    total_loss = 0
+    total_preds = 0
+
+    for i, (train_acts, train_labels, train_fail_ids) in enumerate(train_dataloader):
+      # Zero the gradients
+      opt.zero_grad()
+
+      # Calculate loss
+      outputs = probe(train_acts)
+      loss = criterion(outputs, train_labels)
+
+      loss.backward()
+
+      # Update model weights
+      opt.step()
+
+      total_loss += loss.item()
+      total_preds += len(train_labels)
+
+    # Calculate epoch stats
+    avg_loss = total_loss / total_preds
+
+    losses.append(avg_loss)
+
+    # Write to specified log file
+    if write_log:
+      train_f.write(f'Epoch {epoch+1}: Loss {avg_loss}')
+
+    # Run evaluation on validation set
+    # TODO: maybe implement early stopping? Need to test on larger dataset
+    if val_dataloader is not None:
+        avg_val_loss = eval_regression_probe(probe, val_dataloader)
+        val_losses.append(avg_val_loss)
+
+        if write_log:
+          val_f.write(f'Epoch {epoch+1} (Validation): Loss {avg_val_loss}\n')
+  print(f'\nTraining Set (Epoch {epoch+1} - Final): Loss {avg_loss}')
+
+  return probe, losses, val_losses
+
 def save_probe_to_path(probe, probe_path):
   '''
   Save a probe's state dictionary to a specified path
