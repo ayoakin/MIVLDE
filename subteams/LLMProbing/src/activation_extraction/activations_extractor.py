@@ -97,7 +97,7 @@ class ActivationsExtractor():
                 test_r2 = float('-inf')
               else:
                 test_r2 = r2_score(test_sample['trajectory'], pred_trajectory)
-              activations['r2_score'] = test_r2
+              activations['feature_dict']['r2_score'] = test_r2
               
               # Add the odeformer predicted expression from sample
               f = io.StringIO()
