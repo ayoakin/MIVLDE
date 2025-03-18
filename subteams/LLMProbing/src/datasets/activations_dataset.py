@@ -77,7 +77,7 @@ class R2ActivationsDataset(ActivationsDataset):
 
     # Initialise parent class with filtered paths
     self.act_paths = filtered_paths
-    super.__init__(filtered_paths, feature_label='r2_score', layer_idx=-1, module=module)
+    super().__init__(filtered_paths, feature_label='r2_score', layer_idx=-1, module=module)
 
   def __len__(self):
     return super().__len__()
