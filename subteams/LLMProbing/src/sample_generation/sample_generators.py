@@ -102,20 +102,23 @@ class RandomSamplesGenerator():
     seed_gen = np.random.RandomState(seed)
     for i in tqdm(range(num_samples), desc=f'Generating {sample_descriptor} samples'):
       sample_seed = seed_gen.randint(1_000_000_000)
-      # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
-      # TODO: May need to set with more care?
-      env.rng = np.random.RandomState(sample_seed)
-      sample, errors = env.gen_expr(train=True)
-      sample = self.identify_operators(sample)
-      sample = self.identify_features(sample)
 
       # Set filename
       sample_filename = f"sample_{sample_descriptor}_{sample_seed}.pt"
       sample_filepath = os.path.join(samples_path, sample_filename)
+      if not os.path.exists(sample_filepath):
+        # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
+        # TODO: May need to set with more care?
+        env.rng = np.random.RandomState(sample_seed)
+        sample, errors = env.gen_expr(train=True)
+        sample = self.identify_operators(sample)
+        sample = self.identify_features(sample)
 
-      # Save file using pickle
-      with open(sample_filepath, 'wb') as f:
-        pickle.dump(sample, f)
+        # Save file using pickle
+        with open(sample_filepath, 'wb') as f:
+          pickle.dump(sample, f)
+      else:
+         print(f"\nSkipping sample: {sample_descriptor}_{sample_seed} (sample file already exists)")
 
     print(f"\n[INFO] Data generation complete. Saved {num_samples} {sample_descriptor} samples to {samples_path}")
 
