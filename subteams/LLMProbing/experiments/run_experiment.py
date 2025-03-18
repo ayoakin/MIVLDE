@@ -255,6 +255,7 @@ def r2_prediction_experiment(activations_path, probes_path, \
     
     # Add relevant data to the experiment results
     experiment_data.append({
+          "layer": 15,
           "run": run,
           "test_loss": test_loss,
           "final_train_loss": final_train_loss,
