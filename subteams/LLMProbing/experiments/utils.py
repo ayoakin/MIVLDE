@@ -31,3 +31,5 @@ def plot_from_summary(experiment_summary, descriptor, in_notebook=True, fig_dir=
         fig_path = f'{fig_dir}/acc_plot_{descriptor}.png'
         plt.savefig(fig_path, dpi=300)
     pass
+
+# TODO: need to make these more general to accommodate regression probes which don't have acc
