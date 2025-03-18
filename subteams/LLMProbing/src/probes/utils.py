@@ -6,7 +6,16 @@ from src.probes.lr_probe import LRProbe
 
 def eval_classifier_probe(probe, dataloader):
   '''
-  Evaluate a given probe on a specified dataset (via its corresponding dataloader)
+  Evaluate a given probe on a specified dataset (via its corresponding dataloader).
+
+  Args:
+  - probe (LRProbe): (classifier) probe to be evaluated
+  - dataloader (torch.utils.data.DataLoader): dataloader for dataset on which the probe is to be evaluated
+
+  Returns:
+  - avg_loss (float): average loss (BCEWithLogitsLoss) on the given dataset
+  - accuracy (float): accuracy of the probe on the given dataset
+  - fail_ids (list(str)): IDs of datapoints which the probe fails to classify correctly
   '''
   with torch.no_grad():
     total_loss = 0
@@ -39,7 +48,14 @@ def eval_classifier_probe(probe, dataloader):
   
 def eval_regression_probe(probe, dataloader):
   '''
-  Evaluate a given regression probe (e.g. for predicting R^2 score) on a specified dataset (via its corresponding dataloader)
+  Evaluate a given regression probe (e.g. for predicting R^2 score) on a specified dataset (via its corresponding dataloader).
+
+  Args:
+  - probe (LRProbe): (regression) probe to be evaluated
+  - dataloader (torch.utils.data.DataLoader): dataloader for dataset on which the probe is to be evaluated
+
+  Returns:
+  - avg_loss (float): average loss (MSE loss) on the given dataset
   '''
   with torch.no_grad():
     total_loss = 0
@@ -63,7 +79,24 @@ def train_classifier_probe(probe, train_dataloader, val_dataloader=None, \
                 lr=0.01, num_epochs=20, device='cpu', \
                 logs_path='/content/drive/MyDrive/aisc/logs', write_log=False): # TODO: determine if default hyperparameters are good
   '''
-  Train an instantiated probe using specified training and validation data
+  Train an instantiated classifier probe using specified training and validation data.
+
+  Args:
+  - probe (LRProbe): (classifier) probe to be trained
+  - train_dataloader (torch.utils.data.DataLoader): dataloader for the training set
+  - val_dataloader (torch.utils.data.DataLoader | bool, optional): dataloader for the validation set. Default is None
+  - lr (float, optional): learning rate for training. Default is 0.01
+  - num_epochs (int, optional): number of epochs for training. Default is 20
+  - device (str, optional): device on which to run training. Default is 'cpu'
+  - logs_path (str, optional): path to which log files should be saved, if desired. Default is '/content/drive/MyDrive/aisc/logs'
+  - write_log (bool, optional): whether to write training logs to a file in logs_path. Default is False
+
+  Returns:
+  - probe (LRProbe): a trained (classifier) probe
+  - losses (list(float)): list of losses at each epoch on the training set
+  - accuracies (list(float)): list of accuracies at each epoch on the training set
+  - val_losses (list(float)): list of losses at each epoch on the validation set
+  - val_accuracies (list(float)): list of accuracies at each epoch on the validation set
   '''
   # Use Adam optimizer for now
   # TODO: investigate adding learning rate scheduler (e.g. cosine annealing?)
@@ -152,6 +185,24 @@ def train_classifier_probe(probe, train_dataloader, val_dataloader=None, \
 def train_regression_probe(probe, train_dataloader, val_dataloader=None, \
                            lr=0.01, num_epochs=20, device='cpu', \
                            logs_path='/content/drive/MyDrive/aisc/logs', write_log=False):
+  '''
+  Train an instantiated regression probe using specified training and validation data.
+
+  Args:
+  - probe (LRProbe): (regression) probe to be trained
+  - train_dataloader (torch.utils.data.DataLoader): dataloader for the training set
+  - val_dataloader (torch.utils.data.DataLoader | bool, optional): dataloader for the validation set. Default is None
+  - lr (float, optional): learning rate for training. Default is 0.01
+  - num_epochs (int, optional): number of epochs for training. Default is 20
+  - device (str, optional): device on which to run training. Default is 'cpu'
+  - logs_path (str, optional): path to which log files should be saved, if desired. Default is '/content/drive/MyDrive/aisc/logs'
+  - write_log (bool, optional): whether to write training logs to a file in logs_path. Default is False
+
+  Returns:
+  - probe (LRProbe): a trained (regression) probe
+  - losses (list(float)): list of losses at each epoch on the training set
+  - val_losses (list(float)): list of losses at each epoch on the validation set
+  '''
   # Use Adam optimizer for now
   # TODO: investigate adding learning rate scheduler (e.g. cosine annealing?)
   opt = torch.optim.Adam(probe.parameters(), lr=lr, weight_decay=1e-3)
@@ -225,6 +276,10 @@ def save_probe_to_path(probe, probe_path):
   '''
   Save a probe's state dictionary to a specified path
   (saving only the state dictionary is suggested by PyTorch)
+
+  Args:
+  - probe (LRProbe): probe to be saved
+  - probe_path (str): path to which the probe should be saved (incl. filename)
   '''
   torch.save(probe.state_dict(), probe_path)
   print(f'Saved state dictionary to {probe_path}')
@@ -233,6 +288,10 @@ def save_probe_to_path(probe, probe_path):
 def load_probe_from_path(probe_path, d_in=512):
   '''
   Returns a probe ready for evaluation loaded from the given path, with specified input dimension
+
+  Args:
+  - probe_path (str): path from which the probe should be loaded
+  - d_in (int): dimension of data which is input to the probe
   '''
   probe = LRProbe(d_in=d_in)
   probe.load_state_dict(torch.load(probe_path, weights_only=True))
