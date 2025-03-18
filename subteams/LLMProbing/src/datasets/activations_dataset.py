@@ -55,3 +55,32 @@ class ActivationsDataset(Dataset):
       return match.group(1)
     else:
       raise ValueError(f"Activation filename not formatted as expected. Expected format: activation_[descriptor]_[index].pt, Actual format: {act_filename}")
+    
+
+class R2ActivationsDataset(ActivationsDataset):
+  def __init__(self, activations_path, module='ffn'):
+    all_paths = [os.path.join(activations_path, f) for f in os.listdir(activations_path)]
+    
+    # Filter paths based on r2_score
+    filtered_paths = []
+    for path in all_paths:
+        try:
+            with open(path, 'rb') as f:
+                activation = pickle.load(f)
+            feature_value = activation['feature_dict']['r2_score']
+            
+            # Exclude paths where r2_score is inf
+            if torch.isinf(feature_value).item():
+                filtered_paths.append(path)
+        except Exception as e:
+            print(f"Warning: Failed to process {path} due to {e}")
+
+    # Initialise parent class with filtered paths
+    self.act_paths = filtered_paths
+    super.__init__(filtered_paths, feature_label='r2_score', layer_idx=-1, module=module)
+
+  def __len__(self):
+    return super().__len__()
+
+  def __getitem__(self, idx):
+    return super().__getitem__(idx)
