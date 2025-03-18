@@ -11,9 +11,10 @@ except ModuleNotFoundError as e:
     raise e
 
 class RandomSamplesGenerator():
-
   '''
   Generate samples using odeformer's sample generation
+
+  TODO: update this description
 
   Params:
   * operators, (id, add, sub, mul, div, abds, inv, sqrt, log, exp, sin, arcsin, cos, arccos, tan, arctan, pow2, pow3)
@@ -41,15 +42,7 @@ class RandomSamplesGenerator():
   9. feature_dict: dictionary of which features the sample includes
 
   '''
-  # def __init__(self, samples_path='/content/drive/MyDrive/aisc/samples', num_samples=10, seed=None, operators_to_use='id:1,add:1,mul:1', min_dimension=1, max_dimension=1): 
   def __init__(self): 
-    # parser = get_parser()
-    # params = parser.parse_args(args=["--operators_to_use", operators_to_use, "--min_dimension", str(min_dimension), "--max_dimension", str(max_dimension)])
-    # self.env = FunctionEnvironment(params)
-    # self.samples_path = samples_path
-    # os.makedirs(self.samples_path, exist_ok=True)
-    # self.num_samples = num_samples
-    # self.seed = seed
     pass
 
   def identify_operators(self, sample):
@@ -68,13 +61,14 @@ class RandomSamplesGenerator():
               feature_dict[feature_name] = 0
   
   def identify_features(self, sample):
-
-      # grouped operators to consider as a single feature
+      # Group operators to consider as a single feature
       sin_cos = ['sin', 'cos']
       arc_sin_cos = ['arcsin', 'arccos']
-      # each of these operators is considered as a feature
+      
+      # Each of these operators is considered as a feature
       features_single = ['log', 'exp', 'tan', 'arctan']
-      # each of these operators is checked for in the skeleton_tree representation of the sample, because they don't come uniquely from one operator
+      
+      # Each of these operators is checked for in the skeleton_tree representation of the sample, because they don't come uniquely from one operator
       features_tree_search = {'pow2' : '**2', 'pow3' : '**3', 'inv' : '**-1', 'sqrt' : '**1 * (2)**-1'} # maybe should move these to operator_dict
 
       skeleton_tree = str(sample['skeleton_tree'])
@@ -106,6 +100,7 @@ class RandomSamplesGenerator():
       # Set filename
       sample_filename = f"sample_{sample_descriptor}_{sample_seed}.pt"
       sample_filepath = os.path.join(samples_path, sample_filename)
+
       if not os.path.exists(sample_filepath):
         # Number copied somewhere from their github (https://github.com/sdascoli/odeformer/blob/c9193012ad07a97186290b98d8290d1a177f4609/odeformer/trainer.py#L244)
         # TODO: May need to set with more care?
@@ -143,13 +138,10 @@ class ManualSamplesGenerator():
         # Save file using pickle
         with open(sample_filepath, 'wb') as f:
           pickle.dump(sample, f)
-        # print(f"[INFO] Saved to {sample_filepath}")
 
   def generate_exponential_samples(self, t_values, c_values, a_values):
     manual_samples = []
 
-    # for c_val in c_values:
-    #     for a_val in a_values:
     for c_val, a_val in itertools.product(c_values, a_values, desc='Generating exponential samples'):
       trajectory = (c_val * np.exp(-a_val * t_values)).reshape(-1, 1)
       sample_dict = {
@@ -168,15 +160,13 @@ class ManualSamplesGenerator():
   def generate_hyperbolic_samples(self, t_values, c_values, t0_values):
     manual_samples = []
 
-    # for c_val in c_values:
-    #     for t0_val in t0_values:
     for c_val, t0_val in itertools.product(c_values, t0_values, desc='Generating hyperbolic samples'):
       trajectory = (c_val / (t0_val - t_values)).reshape(-1, 1)
       sample_dict = {
           'times': t_values,
           'trajectory': trajectory,
           'parameters': {'t0': float(t0_val), 'c': float(c_val)}, # Convert to float for better serialization
-          'feature_dict': {"exponential": 0, "hyperbolic": 1}, # TODO: think about how we could make this more general for the future
+          'feature_dict': {"exponential": 0, "hyperbolic": 1},
           'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
       }
       manual_samples.append(sample_dict)
