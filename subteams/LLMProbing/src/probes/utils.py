@@ -43,6 +43,7 @@ def eval_regression_probe(probe, dataloader):
   '''
   with torch.no_grad():
     total_loss = 0
+    total_preds = 0
     # criterion = torch.nn.MSELoss()
 
     probe.eval()
