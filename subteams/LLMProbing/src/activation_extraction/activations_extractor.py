@@ -1,6 +1,5 @@
 import os
 import io
-# import re
 import pickle
 import numpy as np
 import torch
@@ -40,33 +39,27 @@ class ActivationsExtractor():
                 module.register_forward_hook(lambda module, input, output, name=layer_name: self.hook_fn(module, input, output, name, layer_outputs))
 
     def extract_activations(self, dstr, samples_path, activations_path, layers_to_extract=['ffn']): # We currently look at ouputs of ffn layers since they come before layer norm
+        # Setup
         layer_outputs = {}
         os.makedirs(activations_path, exist_ok=True)
-        # samples_dir = os.fsencode(samples_path)
+
+        # Construct SamplesDataset from path
         samples = SamplesDataset(samples_path)
 
+        # Register hooks in odeformer
         self.register_hooks(dstr.model.encoder, 'encoder', layer_outputs, layers_to_extract)
         self.register_hooks(dstr.model.decoder, 'decoder', layer_outputs, layers_to_extract)
         
-        # for sample in tqdm(os.listdir(samples_dir), desc='Extracting Activations'):
+        # Loop over all samples in the dataset
         for test_sample, test_sample_id in tqdm(samples, desc='Extracting Activations'):
-            # Load sample
-            # sample_name = os.fsdecode(sample)
-            # sample_path = os.path.join(samples_path, sample_name)
-
-            # activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
+            # Use same ID as sample for filename
             activation_filename = f'activation_{test_sample_id}.pt'
             activation_filepath = os.path.join(activations_path, activation_filename)
 
+            # Check if activation file already exists
             if not os.path.exists(activation_filepath):
-            #   print(f"\nProcessing sample: {sample_name}")
-              print(f"\nProcessing sample: {test_sample_id}")
-            #   with open(sample_path, 'rb') as f:
-            #       test_sample = pickle.load(f)
-
-              # test_id = re.findall(r'\d+', sample_name)[0]
-              # print(f"[INFO] Loaded sample with id {test_id} from {sample_path}")
-
+              # print(f"\nProcessing sample: {test_sample_id}")
+              
               # Fit odeformer
               with torch.no_grad():
                   dstr.fit(test_sample['times'], test_sample['trajectory'])
@@ -92,7 +85,6 @@ class ActivationsExtractor():
               # Compute and add R^2 score (this adds a little extra overhead each iteration)
               pred_trajectory = dstr.predict(test_sample['times'], test_sample['trajectory'][0])
               if pred_trajectory is None or np.isnan(pred_trajectory).any():
-                # print(f'\nnan in trajectory of sample {sample_name}')
                 print(f'\nnan in trajectory of sample {test_sample_id}')
                 test_r2 = float('-inf')
               else:
@@ -112,19 +104,11 @@ class ActivationsExtractor():
               elif 'expression' in test_sample:
                 activations['expression'] = test_sample['expression']
 
-              # Save activations dict using same id as sample - TODO: determine if there is a smarter way of assigning ids to samples
-              # Probably it makes sense to just replace 'sample' with 'activation', e.g. 'sample_exp_0' --> 'activation_exp_0'
-              # Currently it will overwrite files...
-              # activation_filename = f"activation_{test_id}.pt"
-              
-            #   activation_filename = sample_name.split('/')[-1].replace('sample', 'activation')
-            #   activation_filepath = os.path.join(activations_path, activation_filename)
+              # Save activations file to specified path
               with open(activation_filepath, 'wb') as f:
                   pickle.dump(activations, f)
-              # print(f"[INFO] Saved activations with id {test_id} to {activation_filepath}")
             else:
-              # File exists, skip processing
-            #   print(f"\nSkipping sample: {sample_name} (activation file already exists)")
+              # Activation file already exists, skip processing
               print(f"\nSkipping sample: {test_sample_id} (activation file already exists)")
 
         print(f'\n[INFO] Activation extraction complete. Activations saved to {activations_path}')
