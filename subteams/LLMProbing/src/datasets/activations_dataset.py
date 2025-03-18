@@ -5,16 +5,64 @@ import torch
 from torch.utils.data import Dataset
 
 class ActivationsDataset(Dataset):
+  """
+  A PyTorch dataset class for loading and processing activations extracted from the odeformer model.
+
+  This dataset loads activation tensors from saved `.pt` files and retrieves corresponding labels
+  for supervised learning tasks.
+
+  Args:
+  - activations_path (str): Path to the directory containing activation files.
+  - feature_label (str): The key used to extract the target feature from the activation metadata.
+  - layer_idx (int): The index of the layer from which activations should be extracted.
+  - module (str, optional): The type of module to extract activations from (default: 'ffn').
+
+  Methods:
+  - __len__(): Returns the number of activation samples.
+  - __getitem__(idx): Loads and returns an activation sample, its corresponding label, and its unique ID.
+  - get_layer_name(idx): Returns the formatted layer name corresponding to a given index.
+  - get_id_from_path(act_path): Extracts and returns the sample ID from the activation file path.
+  """
+
   def __init__(self, activations_path, feature_label, layer_idx, module='ffn'):
+    """
+    Initialises the dataset by collecting activation file paths and setting parameters.
+
+    Args:
+    - activations_path (str): Path to the directory containing activation files.
+    - feature_label (str): The key used to extract the target feature from the activation metadata.
+    - layer_idx (int): The index of the layer from which activations should be extracted.
+    - module (str, optional): The type of module to extract activations from (default: 'ffn').
+    """
     self.act_paths = [os.path.join(activations_path, f) for f in os.listdir(activations_path)]
     self.feature_label = feature_label
     self.layer_idx = layer_idx
     self.module = module
 
   def __len__(self):
+    """
+    Returns the total number of activation files in the dataset.
+
+    Returns:
+    - int: Number of activation samples.
+    """
     return len(self.act_paths)
 
   def __getitem__(self, idx):
+    """
+    Loads an activation sample, its corresponding label, and its ID.
+
+    Args:
+    - idx (int): Index of the activation file to retrieve.
+
+    Returns:
+    - act_data (torch.Tensor): The extracted activation tensor.
+    - act_label (torch.Tensor): The corresponding label tensor for supervised learning.
+    - act_id (str): The unique identifier of the activation sample.
+
+    Raises:
+    - ValueError: If the activation shape does not match the expected dimensions.
+    """
     act_path = self.act_paths[idx]
     with open(act_path, 'rb') as f:
       activation = pickle.load(f)
@@ -31,10 +79,18 @@ class ActivationsDataset(Dataset):
     return act_data, act_label, act_id
 
   def get_layer_name(self, idx):
-    '''
-    Helper function to return the correct name of a layer in the ODEFormer given
-    its index
-    '''
+    """
+    Returns the formatted layer name for the given index.
+
+    Args:
+    - idx (int): The index of the layer.
+
+    Returns:
+    - str: The corresponding layer name.
+
+    Raises:
+    - ValueError: If the provided index is out of the expected range (-16 to 15).
+    """
     layers = [f'encoder_{self.module}_{num}' for num in range(4)] + [f'decoder_{self.module}_{num}' for num in range(12)]
     layer_name = layers[idx]
     if -16 <= idx < 16:
@@ -43,12 +99,18 @@ class ActivationsDataset(Dataset):
       raise ValueError("Layer index should be in -16 to 15")
   
   def get_id_from_path(self, act_path):
-    '''
-    Helper function to return the id of the current sample from its path
-    '''
-    # act_filename = act_path.split('/')[-1]
-    # act_id = re.findall(r'\d+', act_filename)[0]
-    # return act_id
+    """
+    Extracts and returns the sample ID from the activation file path.
+
+    Args:
+    - act_path (str): The file path of the activation.
+
+    Returns:
+    - str: The extracted sample ID.
+
+    Raises:
+    - ValueError: If the activation filename does not match the expected format.
+    """
     act_filename = act_path.split('/')[-1]
     match = re.match(r'activation_([a-zA-Z0-9]+_\d+)\.pt', act_filename)
     if match:
@@ -58,7 +120,32 @@ class ActivationsDataset(Dataset):
     
 
 class R2ActivationsDataset(ActivationsDataset):
+  """
+  A specialized dataset class that extends `ActivationsDataset`, filtering activations based on R^2 score.
+
+  This dataset is used for loading activations while ensuring that samples with an infinite R^2 score are excluded.
+
+  Args:
+  - activations_path (str): Path to the directory containing activation files.
+  - module (str, optional): The type of module to extract activations from (default: 'ffn').
+
+  Methods:
+  - __len__(): Returns the number of valid activation samples.
+  - __getitem__(idx): Retrieves an activation sample, its label, and its ID from the filtered dataset.
+  """
+
   def __init__(self, activations_path, module='ffn'):
+    """
+    Initializes the dataset by filtering out samples with infinite R^2 scores.
+
+    Args:
+    - activations_path (str): Path to the directory containing activation files.
+    - module (str, optional): The type of module to extract activations from (default: 'ffn').
+
+    Notes:
+    - Filters out activation files where the `r2_score` is infinite.
+    - Inherits from `ActivationsDataset`, setting `feature_label='r2_score'` and `layer_idx=-1`.
+    """
     all_paths = [os.path.join(activations_path, f) for f in os.listdir(activations_path)]
     
     # Filter paths based on r2_score
@@ -80,7 +167,22 @@ class R2ActivationsDataset(ActivationsDataset):
     self.act_paths = filtered_paths
 
   def __len__(self):
+    """
+    Returns the number of valid activation samples (excluding those with infinite R^2 scores).
+
+    Returns:
+    - int: Number of filtered activation samples.
+    """
     return super().__len__()
 
   def __getitem__(self, idx):
+    """
+    Retrieves an activation sample, its label, and its ID from the filtered dataset.
+
+    Args:
+    - idx (int): Index of the activation file to retrieve.
+
+    Returns:
+    - Tuple: (torch.Tensor, torch.Tensor, str) -> (activation tensor, label tensor, sample ID).
+    """
     return super().__getitem__(idx)
