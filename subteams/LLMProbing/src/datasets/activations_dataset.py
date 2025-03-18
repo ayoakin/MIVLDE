@@ -70,7 +70,7 @@ class R2ActivationsDataset(ActivationsDataset):
             feature_value = activation['feature_dict']['r2_score']
             
             # Exclude paths where r2_score is inf
-            if torch.isinf(feature_value).item():
+            if torch.isinf(torch.tensor(feature_value, dtype=torch.float)).item():
                 filtered_paths.append(path)
         except Exception as e:
             print(f"Warning: Failed to process {path} due to {e}")
