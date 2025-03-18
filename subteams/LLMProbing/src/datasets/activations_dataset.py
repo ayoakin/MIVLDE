@@ -50,7 +50,7 @@ class ActivationsDataset(Dataset):
     # act_id = re.findall(r'\d+', act_filename)[0]
     # return act_id
     act_filename = act_path.split('/')[-1]
-    match = re.match(r'activation_([a-zA-Z]+_\d+)\.pt', act_filename)
+    match = re.match(r'activation_([a-zA-Z0-9]+_\d+)\.pt', act_filename)
     if match:
       return match.group(1)
     else:

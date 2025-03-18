@@ -22,7 +22,7 @@ class SamplesDataset(Dataset):
     Helper function to return the id of the current sample from its path
     '''
     sample_filename = sample_path.split('/')[-1]
-    match = re.match(r'sample_([a-zA-Z]+_\d+)\.pt', sample_filename)
+    match = re.match(r'sample_([a-zA-Z0-9]+_\d+)\.pt', sample_filename)
     if match:
       return match.group(1)
     else:
