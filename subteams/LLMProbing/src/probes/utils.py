@@ -49,11 +49,9 @@ def eval_regression_probe(probe, dataloader):
 
     for acts, labels, ids in dataloader:
       outputs = probe(acts)
-      print(outputs.shape)
-      print(labels.shape)
       # loss = criterion(outputs, labels)
-      diff = (labels - outputs).item()
-      total_loss += torch.square(diff).sum()
+      diff = (labels - outputs)
+      total_loss += torch.square(diff).sum().item()
 
       total_preds += len(labels)
 
