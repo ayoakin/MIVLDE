@@ -76,8 +76,8 @@ class R2ActivationsDataset(ActivationsDataset):
             print(f"Warning: Failed to process {path} due to {e}")
 
     # Initialise parent class with filtered paths
+    super().__init__(activations_path, feature_label='r2_score', layer_idx=-1, module=module)
     self.act_paths = filtered_paths
-    super().__init__(filtered_paths, feature_label='r2_score', layer_idx=-1, module=module)
 
   def __len__(self):
     return super().__len__()
