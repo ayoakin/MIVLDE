@@ -1,7 +1,7 @@
 import os
 import pandas as pd
 from torch.utils.data import DataLoader
-from src.datasets.activations_dataset import ActivationsDataset
+from src.datasets.activations_dataset import ActivationsDataset, R2ActivationsDataset
 from src.datasets.utils import split_dataset, get_d_in
 from src.probes.lr_probe import LRProbe
 from src.probes.utils import train_classifier_probe, train_regression_probe, eval_classifier_probe, eval_regression_probe, save_probe_to_path
@@ -80,7 +80,7 @@ def separability_testing(target_feature, activations_path, \
 
   return experiment_data
 
-def train_and_save_regression_probe(target_layer_idx, target_feature, activations_path, \
+def train_and_save_r2_probe(target_layer_idx, activations_path, \
                                     probe_name, probes_path, \
                                     lr, num_epochs, \
                                     shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
@@ -88,7 +88,8 @@ def train_and_save_regression_probe(target_layer_idx, target_feature, activation
   TODO: add description
   """
   # Test dataset, dataloaders, and splitting
-  full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=target_layer_idx)
+  # full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=target_layer_idx)
+  full_dataset = R2ActivationsDataset(activations_path=activations_path)
   train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
   train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=shuffle_datasets)
   if use_val:
@@ -121,11 +122,14 @@ def r2_prediction_experiment(activations_path, probes_path, \
                             lr, num_epochs, \
                             num_repeats=1, \
                             shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
+  """
+  TODO: add description
+  """
   experiment_data = []
   for run in range(num_repeats):
     print(f'Repeat {run}')
     probe_name = f'probe_r2_{run}.pt'
-    test_loss, final_train_loss, final_val_loss = train_and_save_regression_probe(target_layer_idx=-1, target_feature='r2_score', activations_path=activations_path, \
+    test_loss, final_train_loss, final_val_loss = train_and_save_r2_probe(target_layer_idx=-1, activations_path=activations_path, \
                                                                              probe_name=probe_name, probes_path=probes_path, \
                                                                              lr=lr, num_epochs=num_epochs, \
                                                                              shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
