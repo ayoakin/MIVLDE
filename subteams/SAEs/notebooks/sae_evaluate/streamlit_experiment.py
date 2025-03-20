@@ -1,6 +1,8 @@
 import streamlit as st
 import numpy as np
 np.infty=np.inf
+np.random.seed(42)
+
 import matplotlib.pyplot as plt
 import torch
 import sympy as sp
