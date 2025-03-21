@@ -15,6 +15,7 @@ import importlib
 from matplotlib.figure import Figure
 import traceback
 import pandas as pd
+from mpl_toolkits.mplot3d import Axes3D
 
 # Check for dimensionality reduction libraries
 sklearn_available = importlib.util.find_spec("sklearn") is not None
@@ -100,6 +101,50 @@ if 'sae_paths' not in st.session_state:
         "Residual Layer 2": "../sae/sae.encoder.outer.residual2_20250309_122318/checkpoints/sae_best_encoder.outer.residual2.pt",
         "Residual Layer 3": "../sae/sae.encoder.outer.residual3_20250309_213613/checkpoints/sae_best_encoder.outer.residual3.pt",
         "Custom Path": ""
+    }
+# Initialize parameters for the new systems
+if 'van_der_pol_params' not in st.session_state:
+    st.session_state.van_der_pol_params = {
+        'mu': 1.0,
+        'x0': 1.0,
+        'y0': 0.0,
+    }
+if 'duffing_params' not in st.session_state:
+    st.session_state.duffing_params = {
+        'alpha': 1.0,
+        'beta': 5.0,
+        'delta': 0.02,
+        'gamma': 8.0,
+        'omega': 0.5,
+        'x0': 0.0,
+        'y0': 0.0,
+    }
+if 'double_pendulum_params' not in st.session_state:
+    st.session_state.double_pendulum_params = {
+        'g': 9.8,
+        'm1': 1.0,
+        'm2': 1.0,
+        'l1': 1.0,
+        'l2': 1.0,
+        'theta1': np.pi/2,
+        'omega1': 0.0,
+        'theta2': np.pi/2,
+        'omega2': 0.0,
+    }
+if 'lorenz_params' not in st.session_state:
+    st.session_state.lorenz_params = {
+        'sigma': 10.0,
+        'rho': 28.0,
+        'beta': 8/3,
+        'x0': 1.0,
+        'y0': 1.0,
+        'z0': 1.0,
+    }
+if 'poincare_params' not in st.session_state:
+    st.session_state.poincare_params = {
+        'axis': 'z',
+        'value': 0.0,
+        'direction': 1,
     }
     
 # Try to import mishax for instrumentation
@@ -460,36 +505,285 @@ def solve_coupled_linear(alpha, beta, y0=np.array([1.0, 1.0]), t=np.linspace(0, 
         print(f"Error solving coupled linear system: {e}")
         return None
 
+# New systems
+def solve_van_der_pol(mu, y0=np.array([1.0, 0.0]), t=np.linspace(0, 20, 200)):
+    """Solve the Van der Pol oscillator system."""
+    
+    def system_fn(t, y):
+        return [y[1], mu * (1 - y[0]**2) * y[1] - y[0]]
+    
+    try:
+        sol = scipy.integrate.solve_ivp(
+            system_fn,
+            (min(t), max(t)),
+            y0,
+            t_eval=t
+        )
+        
+        return {
+            'params': (mu, y0[0], y0[1]),
+            'equations': f"dx/dt = y, dy/dt = {mu}(1-x²)y - x",
+            'solution': sol.y.T,
+            'time_points': t
+        }
+    except Exception as e:
+        print(f"Error solving Van der Pol system: {e}")
+        return None
+
+def solve_duffing(alpha, beta, delta, gamma, omega, y0=np.array([0.0, 0.0]), t=np.linspace(0, 50, 500)):
+    """Solve the Duffing oscillator system."""
+    
+    def system_fn(t, y):
+        return [y[1], -delta * y[1] - alpha * y[0] - beta * y[0]**3 + gamma * np.cos(omega * t)]
+    
+    try:
+        sol = scipy.integrate.solve_ivp(
+            system_fn,
+            (min(t), max(t)),
+            y0,
+            t_eval=t
+        )
+        
+        return {
+            'params': (alpha, beta, delta, gamma, omega, y0[0], y0[1]),
+            'equations': f"dx/dt = y, dy/dt = -({delta})y - ({alpha})x - ({beta})x³ + ({gamma})cos({omega}t)",
+            'solution': sol.y.T,
+            'time_points': t
+        }
+    except Exception as e:
+        print(f"Error solving Duffing system: {e}")
+        return None
+
+def solve_double_pendulum(g, m1, m2, l1, l2, y0=np.array([np.pi/2, 0, np.pi/2, 0]), t=np.linspace(0, 20, 200)):
+    """Solve the double pendulum system."""
+    
+    def system_fn(t, y):
+        theta1, omega1, theta2, omega2 = y
+        
+        # Pre-compute common terms
+        delta = theta2 - theta1
+        sin_delta = np.sin(delta)
+        cos_delta = np.cos(delta)
+        
+        # Compute denominators
+        den1 = (m1 + m2) * l1 - m2 * l1 * cos_delta**2
+        den2 = (l2 / l1) * den1
+        
+        # Compute numerators
+        num1 = m2 * l1 * omega1**2 * sin_delta * cos_delta + m2 * g * np.sin(theta2) * cos_delta + m2 * l2 * omega2**2 * sin_delta - (m1 + m2) * g * np.sin(theta1)
+        num2 = -m2 * l2 * omega2**2 * sin_delta * cos_delta + (m1 + m2) * g * np.sin(theta1) * cos_delta - (m1 + m2) * l1 * omega1**2 * sin_delta - (m1 + m2) * g * np.sin(theta2)
+        
+        # Compute derivatives
+        dtheta1_dt = omega1
+        domega1_dt = num1 / den1
+        dtheta2_dt = omega2
+        domega2_dt = num2 / den2
+        
+        return [dtheta1_dt, domega1_dt, dtheta2_dt, domega2_dt]
+    
+    try:
+        sol = scipy.integrate.solve_ivp(
+            system_fn,
+            (min(t), max(t)),
+            y0,
+            t_eval=t,
+            method='RK45',
+            rtol=1e-6,
+            atol=1e-9
+        )
+        
+        # Convert to cartesian coordinates for visualization
+        theta1 = sol.y[0]
+        theta2 = sol.y[2]
+        
+        x1 = l1 * np.sin(theta1)
+        y1 = -l1 * np.cos(theta1)
+        x2 = x1 + l2 * np.sin(theta2)
+        y2 = y1 - l2 * np.cos(theta2)
+        
+        # Create solution array for ODEformer (using angular variables)
+        angular_solution = sol.y.T
+        
+        # Create cartesian solution for visualization
+        cartesian_solution = np.column_stack((x1, y1, x2, y2)).T
+        
+        return {
+            'params': (g, m1, m2, l1, l2, y0[0], y0[1], y0[2], y0[3]),
+            'equations': "Complex equations for double pendulum dynamics",
+            'solution': angular_solution,
+            'cartesian_solution': cartesian_solution,
+            'time_points': t
+        }
+    except Exception as e:
+        print(f"Error solving double pendulum system: {e}")
+        traceback.print_exc()
+        return None
+
+def solve_lorenz(sigma, rho, beta, y0=np.array([1.0, 1.0, 1.0]), t=np.linspace(0, 50, 5000)):
+    """Solve the Lorenz system."""
+    
+    def system_fn(t, y):
+        return [sigma * (y[1] - y[0]), y[0] * (rho - y[2]) - y[1], y[0] * y[1] - beta * y[2]]
+    
+    try:
+        sol = scipy.integrate.solve_ivp(
+            system_fn,
+            (min(t), max(t)),
+            y0,
+            t_eval=t,
+            method='RK45',
+            rtol=1e-6,
+            atol=1e-9
+        )
+        
+        return {
+            'params': (sigma, rho, beta, y0[0], y0[1], y0[2]),
+            'equations': f"dx/dt = {sigma}(y - x), dy/dt = x({rho} - z) - y, dz/dt = xy - {beta}z",
+            'solution': sol.y.T,
+            'time_points': t,
+            'is_3d': True
+        }
+    except Exception as e:
+        print(f"Error solving Lorenz system: {e}")
+        return None
+
+def compute_poincare_section(solution, axis='z', value=0.0, direction=1):
+    """
+    Compute Poincaré section for a dynamical system.
+    
+    Args:
+        solution: Solution dictionary containing time_points and solution
+        axis: Axis for the section ('x', 'y', or 'z' for 3D systems, or a tuple of indices)
+        value: Value at which to take the section
+        direction: Direction of crossing (1 for positive, -1 for negative, 0 for both)
+        
+    Returns:
+        Arrays of intersection points
+    """
+    # Extract solution data
+    data = solution['solution']
+    
+    # Map axis name to index for 3D systems
+    if isinstance(axis, str):
+        axis_map = {'x': 0, 'y': 1, 'z': 2}
+        axis_idx = axis_map.get(axis.lower(), 0)
+    else:
+        # If axis is already an index
+        axis_idx = axis
+    
+    # Find crossings of the section
+    crossings = []
+    for i in range(1, len(data)):
+        # Check if the trajectory crossed the section
+        prev_val = data[i-1, axis_idx] - value
+        curr_val = data[i, axis_idx] - value
+        
+        # Check crossing in the specified direction
+        if direction > 0 and prev_val < 0 and curr_val >= 0:
+            # Positive crossing
+            crossings.append(i)
+        elif direction < 0 and prev_val > 0 and curr_val <= 0:
+            # Negative crossing
+            crossings.append(i)
+        elif direction == 0 and prev_val * curr_val <= 0 and prev_val != curr_val:
+            # Any crossing (but avoid tangent points)
+            crossings.append(i)
+    
+    # Extract the intersection points
+    intersection_points = []
+    for i in crossings:
+        t0 = solution['time_points'][i-1]
+        t1 = solution['time_points'][i]
+        
+        point0 = data[i-1]
+        point1 = data[i]
+        
+        # Linear interpolation parameter
+        alpha = (value - point0[axis_idx]) / (point1[axis_idx] - point0[axis_idx])
+        
+        # Compute intersection point
+        intersection = point0 + alpha * (point1 - point0)
+        
+        # For 3D systems, remove the sectioning axis
+        if len(point0) == 3:
+            # Create a point with other two coordinates
+            other_indices = [j for j in range(3) if j != axis_idx]
+            section_point = intersection[other_indices]
+            intersection_points.append(section_point)
+        else:
+            # For other systems, keep all coordinates
+            intersection_points.append(intersection)
+    
+    # Convert to numpy array
+    if intersection_points:
+        return np.array(intersection_points)
+    else:
+        return np.array([])
+
 # Function to get activations for the currently selected site and component
 def get_activations(model, solution):
-    """Get activations for the currently selected site and component"""
+    """Get activations for the currently selected site and component directly from a single model run"""
     site_name = st.session_state.activation_site
     component = st.session_state.activation_component
     
-    all_activations, activations = get_model_activations(
-        model, solution, site_name=site_name, component=component
-    )
+    # Check if we already have all_collected_activations in the session state
+    if st.session_state.all_collected_activations is not None:
+        print("Using cached activations from session state")
+        all_activations = st.session_state.all_collected_activations
+    else:
+        # Run the model only once to collect all activations
+        print("Starting single model run to collect all activations...")
+        all_activations, _ = collect_activations_during_fit(
+            model, solution['time_points'], solution['solution']
+        )
+        
+        # Store all collected activations for future reference
+        if all_activations:
+            st.session_state.all_collected_activations = all_activations
+            # Don't print duplicate "Collection complete" message
+            
+            # Print component details for debugging
+            for site in all_activations:
+                print(f"Site '{site}' has components: {list(all_activations[site].keys())}")
     
-    # Store all collected activations for component selection
+    # Extract the specific activations we need from the all_activations dictionary
+    specific_activations = None
     if all_activations:
-        st.session_state.all_collected_activations = all_activations
+        if site_name in all_activations:
+            if component in all_activations[site_name]:
+                shapes = list(all_activations[site_name][component].keys())
+                if shapes:
+                    tensor_list = all_activations[site_name][component][shapes[0]]
+                    if tensor_list:
+                        tensor = tensor_list[0]
+                        if tensor.dim() == 3:
+                            specific_activations = tensor[0].numpy()  # Extract batch dim
+                        else:
+                            specific_activations = tensor.numpy()
         
-        # Print info about collected activations to debug
-        print(f"Collection complete. Found sites: {list(all_activations.keys())}")
-        for site in all_activations:
-            print(f"Site '{site}' has components: {list(all_activations[site].keys())}")
+        # If extraction failed, try the default component without running model again
+        if specific_activations is None and (site_name != 'RESIDUAL' or component != 'encoder.transformer.residual1'):
+            st.warning(f"Failed to extract activations for {site_name}.{component}. Trying defaults.")
+            default_component = 'encoder.transformer.residual1'
+            
+            # Try to extract from already collected activations
+            if 'RESIDUAL' in all_activations and default_component in all_activations['RESIDUAL']:
+                shapes = list(all_activations['RESIDUAL'][default_component].keys())
+                if shapes:
+                    tensor_list = all_activations['RESIDUAL'][default_component][shapes[0]]
+                    if tensor_list:
+                        tensor = tensor_list[0]
+                        if tensor.dim() == 3:
+                            specific_activations = tensor[0].numpy()
+                        else:
+                            specific_activations = tensor.numpy()
+                            
+                if specific_activations is not None:
+                    # Update session state to reflect the actual values used
+                    st.session_state.activation_site = 'RESIDUAL'
+                    st.session_state.activation_component = default_component
     
-    # If collection failed with the selected site/component, try the defaults
-    if activations is None and (site_name != 'RESIDUAL' or component != 'encoder.transformer.residual1'):
-        st.warning(f"Failed to collect activations for {site_name}.{component}. Trying defaults.")
-        _, activations = get_model_activations(model, solution)
-        
-        if activations is not None:
-            # Update session state to reflect the actual values used
-            st.session_state.activation_site = 'RESIDUAL'
-            st.session_state.activation_component = 'encoder.transformer.residual1'
-    
-    return activations
+    return specific_activations
 
 # Function to process activation through SAE
 def apply_sae(sae_model, activations):
@@ -550,8 +844,15 @@ if st.session_state.models_loaded:
     st.sidebar.header("System Selection")
     system_type = st.sidebar.selectbox(
         "Select System Type",
-        ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System"],
-        index=["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System"].index(st.session_state.system_type) if st.session_state.system_type in ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System"] else 0
+        ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", 
+         "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System",
+         "Van der Pol Oscillator", "Duffing Oscillator", "Double Pendulum", "Lorenz System"],
+        index=["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", 
+               "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System",
+               "Van der Pol Oscillator", "Duffing Oscillator", "Double Pendulum", "Lorenz System"].index(st.session_state.system_type) 
+              if st.session_state.system_type in ["Harmonic Oscillator", "Sinusoidal Function", "Linear Function", 
+                                            "Lotka-Volterra", "FitzHugh-Nagumo", "Coupled Linear System",
+                                            "Van der Pol Oscillator", "Duffing Oscillator", "Double Pendulum", "Lorenz System"] else 0
     )
     st.session_state.system_type = system_type
 
@@ -562,13 +863,24 @@ if st.session_state.models_loaded:
     # Adjust end time based on system type
     if system_type == "FitzHugh-Nagumo":
         t_end_default = 100.0
-    elif system_type == "Lotka-Volterra":
+    elif system_type in ["Lotka-Volterra", "Van der Pol Oscillator", "Double Pendulum"]:
         t_end_default = 20.0
+    elif system_type in ["Duffing Oscillator", "Lorenz System"]:
+        t_end_default = 50.0
     else:
         t_end_default = 10.0
         
     t_end = st.sidebar.number_input("End Time", value=t_end_default, step=1.0, min_value=t_start + 0.1)
-    t_points = st.sidebar.slider("Number of Time Points", 10, 1000, 100, 10)
+    
+    # Adjust number of points based on system type
+    if system_type in ["Duffing Oscillator", "Lorenz System"]:
+        t_points_default = 500
+    elif system_type == "FitzHugh-Nagumo":
+        t_points_default = 1000
+    else:
+        t_points_default = 200
+        
+    t_points = st.sidebar.slider("Number of Time Points", 10, 5000, t_points_default, 10)
     times = np.linspace(t_start, t_end, t_points)
 
     # Parameter inputs based on system selection
@@ -576,77 +888,546 @@ if st.session_state.models_loaded:
     
     if system_type == "Harmonic Oscillator":
         st.sidebar.subheader("Equation Parameters")
-        omega = st.sidebar.slider("Natural Frequency (ω)", 0.1, 5.0, 1.0, 0.1)
-        gamma = st.sidebar.slider("Damping Coefficient (γ)", 0.0, 5.0, 0.5, 0.1)
+        # Use columns for sliders and text inputs
+        col1, col2 = st.sidebar.columns(2)
+        
+        with col1:
+            omega = st.slider("Natural Frequency (ω)", 0.1, 50.0, st.session_state.get('ho_omega', 1.0), 0.1)
+            st.session_state.ho_omega = omega
+            
+        with col2:
+            omega = st.number_input("ω value", 0.1, 50.0, st.session_state.ho_omega, 0.1, key="ho_omega_input")
+            st.session_state.ho_omega = omega
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            gamma = st.slider("Damping Coefficient (γ)", 0.0, 50.0, st.session_state.get('ho_gamma', 0.5), 0.1)
+            st.session_state.ho_gamma = gamma
+            
+        with col2:
+            gamma = st.number_input("γ value", 0.0, 50.0, st.session_state.ho_gamma, 0.1, key="ho_gamma_input")
+            st.session_state.ho_gamma = gamma
         
         st.sidebar.subheader("Initial Conditions")
-        x0 = st.sidebar.slider("Initial Position (x₀)", -5.0, 5.0, 1.0, 0.1)
-        v0 = st.sidebar.slider("Initial Velocity (v₀)", -5.0, 5.0, 0.0, 0.1)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            x0 = st.slider("Initial Position (x₀)", -50.0, 50.0, st.session_state.get('ho_x0', 1.0), 0.1)
+            st.session_state.ho_x0 = x0
+            
+        with col2:
+            x0 = st.number_input("x₀ value", -50.0, 50.0, st.session_state.ho_x0, 0.1, key="ho_x0_input")
+            st.session_state.ho_x0 = x0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            v0 = st.slider("Initial Velocity (v₀)", -50.0, 50.0, st.session_state.get('ho_v0', 0.0), 0.1)
+            st.session_state.ho_v0 = v0
+            
+        with col2:
+            v0 = st.number_input("v₀ value", -50.0, 50.0, st.session_state.ho_v0, 0.1, key="ho_v0_input")
+            st.session_state.ho_v0 = v0
         
         # Create parameters object for current system
         system_params = (omega, gamma, x0, v0)
         
     elif system_type == "Sinusoidal Function":
         st.sidebar.subheader("Function Parameters")
-        amplitude = st.sidebar.slider("Amplitude (A)", 0.1, 5.0, 1.0, 0.1)
-        frequency = st.sidebar.slider("Frequency (ω)", 0.1, 5.0, 1.0, 0.1)
-        phase = st.sidebar.slider("Phase (φ, radians)", 0.0, 2*np.pi, 0.0, 0.1)
-        use_cos = st.sidebar.checkbox("Use Cosine instead of Sine", False)
-        
-        # No initial conditions for pure functions
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            amplitude = st.slider("Amplitude (A)", 0.1, 50.0, st.session_state.get('sin_amplitude', 1.0), 0.1)
+            st.session_state.sin_amplitude = amplitude
+            
+        with col2:
+            amplitude = st.number_input("A value", 0.1, 50.0, st.session_state.sin_amplitude, 0.1, key="sin_amp_input")
+            st.session_state.sin_amplitude = amplitude
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            frequency = st.slider("Frequency (ω)", 0.1, 50.0, st.session_state.get('sin_frequency', 1.0), 0.1)
+            st.session_state.sin_frequency = frequency
+            
+        with col2:
+            frequency = st.number_input("ω value", 0.1, 50.0, st.session_state.sin_frequency, 0.1, key="sin_freq_input")
+            st.session_state.sin_frequency = frequency
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            phase = st.slider("Phase (φ, radians)", 0.0, 2*np.pi, st.session_state.get('sin_phase', 0.0), 0.1)
+            st.session_state.sin_phase = phase
+            
+        with col2:
+            phase = st.number_input("φ value", 0.0, 2*np.pi, st.session_state.sin_phase, 0.1, key="sin_phase_input")
+            st.session_state.sin_phase = phase
+            
+        use_cos = st.sidebar.checkbox("Use Cosine instead of Sine", st.session_state.get('sin_use_cos', False))
+        st.session_state.sin_use_cos = use_cos
         
         # Create parameters object for current system
         system_params = (amplitude, frequency, phase, use_cos)
         
     elif system_type == "Linear Function":
         st.sidebar.subheader("Function Parameters")
-        slope = st.sidebar.slider("Slope (m)", -5.0, 5.0, 1.0, 0.1)
-        intercept = st.sidebar.slider("Intercept (b)", -5.0, 5.0, 0.0, 0.1)
-        
-        # No initial conditions for pure functions
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            slope = st.slider("Slope (m)", -50.0, 50.0, st.session_state.get('lin_slope', 1.0), 0.1)
+            st.session_state.lin_slope = slope
+            
+        with col2:
+            slope = st.number_input("m value", -50.0, 50.0, st.session_state.lin_slope, 0.1, key="lin_slope_input")
+            st.session_state.lin_slope = slope
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            intercept = st.slider("Intercept (b)", -50.0, 50.0, st.session_state.get('lin_intercept', 0.0), 0.1)
+            st.session_state.lin_intercept = intercept
+            
+        with col2:
+            intercept = st.number_input("b value", -50.0, 50.0, st.session_state.lin_intercept, 0.1, key="lin_intercept_input")
+            st.session_state.lin_intercept = intercept
         
         # Create parameters object for current system
         system_params = (slope, intercept)
         
     elif system_type == "Lotka-Volterra":
         st.sidebar.subheader("Equation Parameters")
-        alpha = st.sidebar.slider("Prey Growth Rate (α)", 0.1, 2.0, 0.5, 0.1)
-        beta = st.sidebar.slider("Predation Rate (β)", 0.01, 1.0, 0.2, 0.01)
-        delta = st.sidebar.slider("Predator Death Rate (δ)", 0.1, 2.0, 0.5, 0.1)
-        gamma = st.sidebar.slider("Predator Growth from Prey (γ)", 0.01, 1.0, 0.1, 0.01)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            alpha = st.slider("Prey Growth Rate (α)", 0.1, 20.0, st.session_state.get('lv_alpha', 0.5), 0.1)
+            st.session_state.lv_alpha = alpha
+            
+        with col2:
+            alpha = st.number_input("α value", 0.1, 20.0, st.session_state.lv_alpha, 0.1, key="lv_alpha_input")
+            st.session_state.lv_alpha = alpha
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            beta = st.slider("Predation Rate (β)", 0.01, 10.0, st.session_state.get('lv_beta', 0.2), 0.01)
+            st.session_state.lv_beta = beta
+            
+        with col2:
+            beta = st.number_input("β value", 0.01, 10.0, st.session_state.lv_beta, 0.01, key="lv_beta_input")
+            st.session_state.lv_beta = beta
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            delta = st.slider("Predator Death Rate (δ)", 0.1, 20.0, st.session_state.get('lv_delta', 0.5), 0.1)
+            st.session_state.lv_delta = delta
+            
+        with col2:
+            delta = st.number_input("δ value", 0.1, 20.0, st.session_state.lv_delta, 0.1, key="lv_delta_input")
+            st.session_state.lv_delta = delta
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            gamma = st.slider("Predator Growth from Prey (γ)", 0.01, 10.0, st.session_state.get('lv_gamma', 0.1), 0.01)
+            st.session_state.lv_gamma = gamma
+            
+        with col2:
+            gamma = st.number_input("γ value", 0.01, 10.0, st.session_state.lv_gamma, 0.01, key="lv_gamma_input")
+            st.session_state.lv_gamma = gamma
         
         st.sidebar.subheader("Initial Conditions")
-        prey0 = st.sidebar.slider("Initial Prey Population (x₀)", 0.1, 5.0, 1.0, 0.1)
-        predator0 = st.sidebar.slider("Initial Predator Population (y₀)", 0.1, 5.0, 0.5, 0.1)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            prey0 = st.slider("Initial Prey Population (x₀)", 0.1, 50.0, st.session_state.get('lv_prey0', 1.0), 0.1)
+            st.session_state.lv_prey0 = prey0
+            
+        with col2:
+            prey0 = st.number_input("x₀ value", 0.1, 50.0, st.session_state.lv_prey0, 0.1, key="lv_prey0_input")
+            st.session_state.lv_prey0 = prey0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            predator0 = st.slider("Initial Predator Population (y₀)", 0.1, 50.0, st.session_state.get('lv_predator0', 0.5), 0.1)
+            st.session_state.lv_predator0 = predator0
+            
+        with col2:
+            predator0 = st.number_input("y₀ value", 0.1, 50.0, st.session_state.lv_predator0, 0.1, key="lv_predator0_input")
+            st.session_state.lv_predator0 = predator0
         
         # Create parameters object for current system
         system_params = (alpha, beta, delta, gamma, prey0, predator0)
         
     elif system_type == "FitzHugh-Nagumo":
         st.sidebar.subheader("Equation Parameters")
-        a = st.sidebar.slider("Parameter a", -1.0, 1.0, 0.7, 0.1)
-        b = st.sidebar.slider("Parameter b", 0.1, 1.0, 0.8, 0.1)
-        tau = st.sidebar.slider("Time Scale (τ)", 1.0, 20.0, 12.5, 0.5)
-        I = st.sidebar.slider("Input Current (I)", 0.0, 2.0, 0.5, 0.1)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            a = st.slider("Parameter a", -10.0, 10.0, st.session_state.get('fn_a', 0.7), 0.1)
+            st.session_state.fn_a = a
+            
+        with col2:
+            a = st.number_input("a value", -10.0, 10.0, st.session_state.fn_a, 0.1, key="fn_a_input")
+            st.session_state.fn_a = a
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            b = st.slider("Parameter b", 0.1, 10.0, st.session_state.get('fn_b', 0.8), 0.1)
+            st.session_state.fn_b = b
+            
+        with col2:
+            b = st.number_input("b value", 0.1, 10.0, st.session_state.fn_b, 0.1, key="fn_b_input")
+            st.session_state.fn_b = b
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            tau = st.slider("Time Scale (τ)", 1.0, 200.0, st.session_state.get('fn_tau', 12.5), 0.5)
+            st.session_state.fn_tau = tau
+            
+        with col2:
+            tau = st.number_input("τ value", 1.0, 200.0, st.session_state.fn_tau, 0.5, key="fn_tau_input")
+            st.session_state.fn_tau = tau
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            I = st.slider("Input Current (I)", 0.0, 20.0, st.session_state.get('fn_I', 0.5), 0.1)
+            st.session_state.fn_I = I
+            
+        with col2:
+            I = st.number_input("I value", 0.0, 20.0, st.session_state.fn_I, 0.1, key="fn_I_input")
+            st.session_state.fn_I = I
         
         st.sidebar.subheader("Initial Conditions")
-        v0 = st.sidebar.slider("Initial Membrane Potential (v₀)", -2.0, 2.0, 0.0, 0.1)
-        w0 = st.sidebar.slider("Initial Recovery Variable (w₀)", -2.0, 2.0, 0.0, 0.1)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            v0 = st.slider("Initial Membrane Potential (v₀)", -20.0, 20.0, st.session_state.get('fn_v0', 0.0), 0.1)
+            st.session_state.fn_v0 = v0
+            
+        with col2:
+            v0 = st.number_input("v₀ value", -20.0, 20.0, st.session_state.fn_v0, 0.1, key="fn_v0_input")
+            st.session_state.fn_v0 = v0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            w0 = st.slider("Initial Recovery Variable (w₀)", -20.0, 20.0, st.session_state.get('fn_w0', 0.0), 0.1)
+            st.session_state.fn_w0 = w0
+            
+        with col2:
+            w0 = st.number_input("w₀ value", -20.0, 20.0, st.session_state.fn_w0, 0.1, key="fn_w0_input")
+            st.session_state.fn_w0 = w0
         
         # Create parameters object for current system
         system_params = (a, b, tau, I, v0, w0)
         
     elif system_type == "Coupled Linear System":
         st.sidebar.subheader("Equation Parameters")
-        alpha = st.sidebar.slider("Alpha (α) coefficient", -5.0, 5.0, 1.0, 0.1)
-        beta = st.sidebar.slider("Beta (β) coefficient", -5.0, 5.0, -1.0, 0.1)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            alpha = st.slider("Alpha (α) coefficient", -50.0, 50.0, st.session_state.get('cl_alpha', 1.0), 0.1)
+            st.session_state.cl_alpha = alpha
+            
+        with col2:
+            alpha = st.number_input("α value", -50.0, 50.0, st.session_state.cl_alpha, 0.1, key="cl_alpha_input")
+            st.session_state.cl_alpha = alpha
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            beta = st.slider("Beta (β) coefficient", -50.0, 50.0, st.session_state.get('cl_beta', -1.0), 0.1)
+            st.session_state.cl_beta = beta
+            
+        with col2:
+            beta = st.number_input("β value", -50.0, 50.0, st.session_state.cl_beta, 0.1, key="cl_beta_input")
+            st.session_state.cl_beta = beta
         
         st.sidebar.subheader("Initial Conditions")
-        x0 = st.sidebar.slider("Initial x value (x₀)", -5.0, 5.0, 1.0, 0.1)
-        y0 = st.sidebar.slider("Initial y value (y₀)", -5.0, 5.0, 0.0, 0.1)
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            x0 = st.slider("Initial x value (x₀)", -50.0, 50.0, st.session_state.get('cl_x0', 1.0), 0.1)
+            st.session_state.cl_x0 = x0
+            
+        with col2:
+            x0 = st.number_input("x₀ value", -50.0, 50.0, st.session_state.cl_x0, 0.1, key="cl_x0_input")
+            st.session_state.cl_x0 = x0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            y0 = st.slider("Initial y value (y₀)", -50.0, 50.0, st.session_state.get('cl_y0', 0.0), 0.1)
+            st.session_state.cl_y0 = y0
+            
+        with col2:
+            y0 = st.number_input("y₀ value", -50.0, 50.0, st.session_state.cl_y0, 0.1, key="cl_y0_input")
+            st.session_state.cl_y0 = y0
         
         # Create parameters object for current system
         system_params = (alpha, beta, x0, y0)
+        
+    elif system_type == "Van der Pol Oscillator":
+        st.sidebar.subheader("Equation Parameters")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            mu = st.slider("Nonlinearity Parameter (μ)", 0.1, 50.0, st.session_state.van_der_pol_params['mu'], 0.1)
+            st.session_state.van_der_pol_params['mu'] = mu
+            
+        with col2:
+            mu = st.number_input("μ value", 0.1, 50.0, st.session_state.van_der_pol_params['mu'], 0.1)
+            st.session_state.van_der_pol_params['mu'] = mu
+        
+        st.sidebar.subheader("Initial Conditions")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            x0 = st.slider("Initial Position (x₀)", -50.0, 50.0, st.session_state.van_der_pol_params['x0'], 0.1)
+            st.session_state.van_der_pol_params['x0'] = x0
+            
+        with col2:
+            x0 = st.number_input("x₀ value", -50.0, 50.0, st.session_state.van_der_pol_params['x0'], 0.1)
+            st.session_state.van_der_pol_params['x0'] = x0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            y0 = st.slider("Initial Velocity (y₀)", -50.0, 50.0, st.session_state.van_der_pol_params['y0'], 0.1)
+            st.session_state.van_der_pol_params['y0'] = y0
+            
+        with col2:
+            y0 = st.number_input("y₀ value", -50.0, 50.0, st.session_state.van_der_pol_params['y0'], 0.1)
+            st.session_state.van_der_pol_params['y0'] = y0
+        
+        # Create parameters object
+        system_params = (mu, x0, y0)
+        
+    elif system_type == "Duffing Oscillator":
+        st.sidebar.subheader("Equation Parameters")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            alpha = st.slider("Linear Stiffness (α)", -50.0, 50.0, st.session_state.duffing_params['alpha'], 0.1)
+            st.session_state.duffing_params['alpha'] = alpha
+            
+        with col2:
+            alpha = st.number_input("α value", -50.0, 50.0, st.session_state.duffing_params['alpha'], 0.1)
+            st.session_state.duffing_params['alpha'] = alpha
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            beta = st.slider("Nonlinear Stiffness (β)", -50.0, 50.0, st.session_state.duffing_params['beta'], 0.1)
+            st.session_state.duffing_params['beta'] = beta
+            
+        with col2:
+            beta = st.number_input("β value", -50.0, 50.0, st.session_state.duffing_params['beta'], 0.1)
+            st.session_state.duffing_params['beta'] = beta
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            delta = st.slider("Damping (δ)", 0.0, 50.0, st.session_state.duffing_params['delta'], 0.01)
+            st.session_state.duffing_params['delta'] = delta
+            
+        with col2:
+            delta = st.number_input("δ value", 0.0, 50.0, st.session_state.duffing_params['delta'], 0.01)
+            st.session_state.duffing_params['delta'] = delta
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            gamma = st.slider("Forcing Amplitude (γ)", 0.0, 80.0, st.session_state.duffing_params['gamma'], 0.1)
+            st.session_state.duffing_params['gamma'] = gamma
+            
+        with col2:
+            gamma = st.number_input("γ value", 0.0, 80.0, st.session_state.duffing_params['gamma'], 0.1)
+            st.session_state.duffing_params['gamma'] = gamma
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            omega = st.slider("Forcing Frequency (ω)", 0.01, 50.0, st.session_state.duffing_params['omega'], 0.01)
+            st.session_state.duffing_params['omega'] = omega
+            
+        with col2:
+            omega = st.number_input("ω value", 0.01, 50.0, st.session_state.duffing_params['omega'], 0.01)
+            st.session_state.duffing_params['omega'] = omega
+        
+        st.sidebar.subheader("Initial Conditions")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            x0 = st.slider("Initial Position (x₀)", -50.0, 50.0, st.session_state.duffing_params['x0'], 0.1)
+            st.session_state.duffing_params['x0'] = x0
+            
+        with col2:
+            x0 = st.number_input("x₀ value", -50.0, 50.0, st.session_state.duffing_params['x0'], 0.1)
+            st.session_state.duffing_params['x0'] = x0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            y0 = st.slider("Initial Velocity (y₀)", -50.0, 50.0, st.session_state.duffing_params['y0'], 0.1)
+            st.session_state.duffing_params['y0'] = y0
+            
+        with col2:
+            y0 = st.number_input("y₀ value", -50.0, 50.0, st.session_state.duffing_params['y0'], 0.1)
+            st.session_state.duffing_params['y0'] = y0
+        
+        # Create parameters object
+        system_params = (alpha, beta, delta, gamma, omega, x0, y0)
+        
+    elif system_type == "Double Pendulum":
+        st.sidebar.subheader("Physical Parameters")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            g = st.slider("Gravity (g)", 1.0, 100.0, st.session_state.double_pendulum_params['g'], 0.1)
+            st.session_state.double_pendulum_params['g'] = g
+            
+        with col2:
+            g = st.number_input("g value", 1.0, 100.0, st.session_state.double_pendulum_params['g'], 0.1)
+            st.session_state.double_pendulum_params['g'] = g
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            m1 = st.slider("Mass 1 (m₁)", 0.1, 10.0, st.session_state.double_pendulum_params['m1'], 0.1)
+            st.session_state.double_pendulum_params['m1'] = m1
+            
+        with col2:
+            m1 = st.number_input("m₁ value", 0.1, 10.0, st.session_state.double_pendulum_params['m1'], 0.1)
+            st.session_state.double_pendulum_params['m1'] = m1
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            m2 = st.slider("Mass 2 (m₂)", 0.1, 10.0, st.session_state.double_pendulum_params['m2'], 0.1)
+            st.session_state.double_pendulum_params['m2'] = m2
+            
+        with col2:
+            m2 = st.number_input("m₂ value", 0.1, 10.0, st.session_state.double_pendulum_params['m2'], 0.1)
+            st.session_state.double_pendulum_params['m2'] = m2
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            l1 = st.slider("Length 1 (l₁)", 0.1, 10.0, st.session_state.double_pendulum_params['l1'], 0.1)
+            st.session_state.double_pendulum_params['l1'] = l1
+            
+        with col2:
+            l1 = st.number_input("l₁ value", 0.1, 10.0, st.session_state.double_pendulum_params['l1'], 0.1)
+            st.session_state.double_pendulum_params['l1'] = l1
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            l2 = st.slider("Length 2 (l₂)", 0.1, 10.0, st.session_state.double_pendulum_params['l2'], 0.1)
+            st.session_state.double_pendulum_params['l2'] = l2
+            
+        with col2:
+            l2 = st.number_input("l₂ value", 0.1, 10.0, st.session_state.double_pendulum_params['l2'], 0.1)
+            st.session_state.double_pendulum_params['l2'] = l2
+            
+        st.sidebar.subheader("Initial Conditions")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            theta1 = st.slider("Initial Angle 1 (θ₁, rad)", -np.pi, np.pi, st.session_state.double_pendulum_params['theta1'], 0.1)
+            st.session_state.double_pendulum_params['theta1'] = theta1
+            
+        with col2:
+            theta1 = st.number_input("θ₁ value", -np.pi, np.pi, st.session_state.double_pendulum_params['theta1'], 0.1)
+            st.session_state.double_pendulum_params['theta1'] = theta1
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            omega1 = st.slider("Initial Angular Velocity 1 (ω₁, rad/s)", -10.0, 10.0, st.session_state.double_pendulum_params['omega1'], 0.1)
+            st.session_state.double_pendulum_params['omega1'] = omega1
+            
+        with col2:
+            omega1 = st.number_input("ω₁ value", -10.0, 10.0, st.session_state.double_pendulum_params['omega1'], 0.1)
+            st.session_state.double_pendulum_params['omega1'] = omega1
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            theta2 = st.slider("Initial Angle 2 (θ₂, rad)", -np.pi, np.pi, st.session_state.double_pendulum_params['theta2'], 0.1)
+            st.session_state.double_pendulum_params['theta2'] = theta2
+            
+        with col2:
+            theta2 = st.number_input("θ₂ value", -np.pi, np.pi, st.session_state.double_pendulum_params['theta2'], 0.1)
+            st.session_state.double_pendulum_params['theta2'] = theta2
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            omega2 = st.slider("Initial Angular Velocity 2 (ω₂, rad/s)", -10.0, 10.0, st.session_state.double_pendulum_params['omega2'], 0.1)
+            st.session_state.double_pendulum_params['omega2'] = omega2
+            
+        with col2:
+            omega2 = st.number_input("ω₂ value", -10.0, 10.0, st.session_state.double_pendulum_params['omega2'], 0.1)
+            st.session_state.double_pendulum_params['omega2'] = omega2
+        
+        # Create parameters object
+        system_params = (g, m1, m2, l1, l2, theta1, omega1, theta2, omega2)
+        
+    elif system_type == "Lorenz System":
+        st.sidebar.subheader("Equation Parameters")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            sigma = st.slider("Sigma (σ)", 0.1, 100.0, st.session_state.lorenz_params['sigma'], 0.1)
+            st.session_state.lorenz_params['sigma'] = sigma
+            
+        with col2:
+            sigma = st.number_input("σ value", 0.1, 100.0, st.session_state.lorenz_params['sigma'], 0.1)
+            st.session_state.lorenz_params['sigma'] = sigma
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            rho = st.slider("Rho (ρ)", 0.1, 100.0, st.session_state.lorenz_params['rho'], 0.1)
+            st.session_state.lorenz_params['rho'] = rho
+            
+        with col2:
+            rho = st.number_input("ρ value", 0.1, 100.0, st.session_state.lorenz_params['rho'], 0.1)
+            st.session_state.lorenz_params['rho'] = rho
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            beta = st.slider("Beta (β)", 0.1, 100.0, st.session_state.lorenz_params['beta'], 0.1)
+            st.session_state.lorenz_params['beta'] = beta
+            
+        with col2:
+            beta = st.number_input("β value", 0.1, 100.0, st.session_state.lorenz_params['beta'], 0.1)
+            st.session_state.lorenz_params['beta'] = beta
+            
+        st.sidebar.subheader("Initial Conditions")
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            x0 = st.slider("Initial x₀", -50.0, 50.0, st.session_state.lorenz_params['x0'], 0.1)
+            st.session_state.lorenz_params['x0'] = x0
+            
+        with col2:
+            x0 = st.number_input("x₀ value", -50.0, 50.0, st.session_state.lorenz_params['x0'], 0.1)
+            st.session_state.lorenz_params['x0'] = x0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            y0 = st.slider("Initial y₀", -50.0, 50.0, st.session_state.lorenz_params['y0'], 0.1)
+            st.session_state.lorenz_params['y0'] = y0
+            
+        with col2:
+            y0 = st.number_input("y₀ value", -50.0, 50.0, st.session_state.lorenz_params['y0'], 0.1)
+            st.session_state.lorenz_params['y0'] = y0
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            z0 = st.slider("Initial z₀", -50.0, 50.0, st.session_state.lorenz_params['z0'], 0.1)
+            st.session_state.lorenz_params['z0'] = z0
+            
+        with col2:
+            z0 = st.number_input("z₀ value", -50.0, 50.0, st.session_state.lorenz_params['z0'], 0.1)
+            st.session_state.lorenz_params['z0'] = z0
+            
+        # Poincaré section parameters for 3D systems
+        st.sidebar.subheader("Poincaré Section")
+        axis_options = ["x", "y", "z"]
+        axis_index = axis_options.index(st.session_state.poincare_params['axis']) if st.session_state.poincare_params['axis'] in axis_options else 2
+        
+        st.session_state.poincare_params['axis'] = st.sidebar.selectbox(
+            "Section Axis", 
+            axis_options,
+            index=axis_index
+        )
+            
+        col1, col2 = st.sidebar.columns(2)
+        with col1:
+            value = st.slider("Section Value", -50.0, 50.0, st.session_state.poincare_params['value'], 0.1)
+            st.session_state.poincare_params['value'] = value
+            
+        with col2:
+            value = st.number_input("Value", -50.0, 50.0, st.session_state.poincare_params['value'], 0.1)
+            st.session_state.poincare_params['value'] = value
+            
+        direction_options = [(1, "Positive"), (-1, "Negative"), (0, "Both")]
+        direction_index = [d[0] for d in direction_options].index(st.session_state.poincare_params['direction']) if st.session_state.poincare_params['direction'] in [d[0] for d in direction_options] else 0
+        
+        st.session_state.poincare_params['direction'] = st.sidebar.selectbox(
+            "Crossing Direction", 
+            direction_options,
+            index=direction_index,
+            format_func=lambda x: x[1]
+        )[0]
+            
+        # Create parameters object
+        system_params = (sigma, rho, beta, x0, y0, z0)
     
     # Solve the selected system based on parameters
     def solve_selected_system():
@@ -671,6 +1452,21 @@ if st.session_state.models_loaded:
             return solve_coupled_linear(alpha, beta, 
                                       y0=np.array([x0, y0]), t=times)
         
+        elif system_type == "Van der Pol Oscillator":
+            return solve_van_der_pol(mu, y0=np.array([x0, y0]), t=times)
+        
+        elif system_type == "Duffing Oscillator":
+            return solve_duffing(alpha, beta, delta, gamma, omega,
+                               y0=np.array([x0, y0]), t=times)
+        
+        elif system_type == "Double Pendulum":
+            return solve_double_pendulum(g, m1, m2, l1, l2,
+                                       y0=np.array([theta1, omega1, theta2, omega2]), t=times)
+        
+        elif system_type == "Lorenz System":
+            return solve_lorenz(sigma, rho, beta,
+                              y0=np.array([x0, y0, z0]), t=times)
+        
         return None
         
     # Check if parameters have changed
@@ -691,66 +1487,7 @@ if st.session_state.models_loaded:
         solution = st.session_state.current_solution
     
     if solution:
-        # Plot the solution
-        st.subheader(f"{system_type} Solution")
-        st.write(f"Equation: {solution['equations']}")
-        
-        # Get the time points
-        times = solution['time_points']
-        
-        # Create labels and derivatives based on the system type
-        if system_type == "Harmonic Oscillator":
-            var1_name = "Position (x)"
-            var2_name = "Velocity (dx/dt)"
-            var1 = solution['solution'][:, 0]
-            var2 = solution['solution'][:, 1]
-            # Calculate acceleration
-            var3_name = "Acceleration (d²x/dt²)"
-            var3 = -omega**2 * var1 - gamma * var2
-            
-        elif system_type == "Sinusoidal Function":
-            var1_name = "Value (y)"
-            var2_name = "Derivative (dy/dt)"
-            var1 = solution['solution'][:, 0]
-            var2 = solution['solution'][:, 1]
-            var3_name = "Second Derivative (d²y/dt²)"
-            # Calculate second derivative
-            var3 = -amplitude * frequency**2 * (np.sin(frequency * times + phase) if not use_cos else np.cos(frequency * times + phase))
-            
-        elif system_type == "Linear Function":
-            var1_name = "Value (y)"
-            var2_name = "Derivative (dy/dt)"
-            var1 = solution['solution'][:, 0]
-            var2 = solution['solution'][:, 1]
-            var3_name = "Second Derivative (d²y/dt²)"
-            # Second derivative is zero for linear function
-            var3 = np.zeros_like(times)
-            
-        elif system_type == "Lotka-Volterra":
-            var1_name = "Prey Population (x)"
-            var2_name = "Predator Population (y)"
-            var1 = solution['solution'][:, 0]
-            var2 = solution['solution'][:, 1]
-            var3_name = None
-            var3 = None
-            
-        elif system_type == "FitzHugh-Nagumo":
-            var1_name = "Membrane Potential (v)"
-            var2_name = "Recovery Variable (w)"
-            var1 = solution['solution'][:, 0]
-            var2 = solution['solution'][:, 1]
-            var3_name = None
-            var3 = None
-            
-        elif system_type == "Coupled Linear System":
-            var1_name = "x"
-            var2_name = "y"
-            var1 = solution['solution'][:, 0]
-            var2 = solution['solution'][:, 1]
-            var3_name = None
-            var3 = None
-        
-        # Collect activations only if needed
+        # Collect activations
         if st.session_state.current_activations is None:
             with st.spinner(f"Collecting neural network activations for {st.session_state.activation_site}.{st.session_state.activation_component}..."):
                 model = st.session_state.model
@@ -807,13 +1544,116 @@ if st.session_state.models_loaded:
                     top_activation_times.append(t)
                     top_activation_values.append(max_val)
         
-        # Create solution plot
+        # Plot the solution and activations
+        st.subheader(f"{system_type} Solution and Feature Activations")
+        st.write(f"Equation: {solution['equations']}")
+        
+        # Get the time points
+        times = solution['time_points']
+        
+        # Create labels and derivatives based on the system type
+        if system_type == "Harmonic Oscillator":
+            var1_name = "Position (x)"
+            var2_name = "Velocity (dx/dt)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            # Calculate acceleration
+            var3_name = "Acceleration (d²x/dt²)"
+            var3 = -omega**2 * var1 - gamma * var2
+            
+        elif system_type == "Sinusoidal Function":
+            var1_name = "Value (y)"
+            var2_name = "Derivative (dy/dt)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = "Second Derivative (d²y/dt²)"
+            # Calculate second derivative
+            var3 = -amplitude * frequency**2 * (np.sin(frequency * times + phase) if not use_cos else np.cos(frequency * times + phase))
+            
+        elif system_type == "Linear Function":
+            var1_name = "Value (y)"
+            var2_name = "Derivative (dy/dt)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = "Second Derivative (d²y/dt²)"
+            # Second derivative is zero for linear function
+            var3 = np.zeros_like(times)
+            
+        elif system_type == "Lotka-Volterra":
+            var1_name = "Prey Population (x)"
+            var2_name = "Predator Population (y)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = None
+            var3 = None
+            
+        elif system_type == "FitzHugh-Nagumo":
+            var1_name = "Membrane Potential (v)"
+            var2_name = "Recovery Variable (w)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = None
+            var3 = None
+            
+        elif system_type == "Coupled Linear System":
+            var1_name = "x"
+            var2_name = "y"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = None
+            var3 = None
+            
+        elif system_type == "Van der Pol Oscillator":
+            var1_name = "Position (x)"
+            var2_name = "Velocity (y)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = None
+            var3 = None
+            
+        elif system_type == "Duffing Oscillator":
+            var1_name = "Position (x)"
+            var2_name = "Velocity (y)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3_name = None
+            var3 = None
+            
+        elif system_type == "Double Pendulum":
+            var1_name = "Angle 1 (θ₁)"
+            var2_name = "Angular Velocity 1 (ω₁)"
+            var3_name = "Angle 2 (θ₂)"
+            var4_name = "Angular Velocity 2 (ω₂)"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3 = solution['solution'][:, 2]
+            var4 = solution['solution'][:, 3]
+            
+        elif system_type == "Lorenz System":
+            var1_name = "x"
+            var2_name = "y" 
+            var3_name = "z"
+            var1 = solution['solution'][:, 0]
+            var2 = solution['solution'][:, 1]
+            var3 = solution['solution'][:, 2]
+        
+        # Create feature activation plot
+        feature_values = latent_features[:, feature_idx]
+        
+        # Solution plot - full width
         fig1, ax1 = plt.subplots(1, 1, figsize=(10, 5))
         ax1.plot(times, var1, label=var1_name, linewidth=2)
         ax1.plot(times, var2, label=var2_name, linewidth=2)
         
-        if var3 is not None:
+        if var3 is not None and system_type not in ["Double Pendulum", "Lorenz System"]:
             ax1.plot(times, var3, label=var3_name, linewidth=1.5, linestyle='--')
+            
+        elif system_type == "Double Pendulum":
+            ax1.plot(times, var3, label=var3_name, linewidth=1.5)
+            ax1.plot(times, var4, label=var4_name, linewidth=1.5, linestyle='--')
+            
+        elif system_type == "Lorenz System":
+            ax1.plot(times, var3, label=var3_name, linewidth=1.5)
             
         # Add colorized vertical lines for top activations if available
         if highlight_on_solution and top_activation_values:
@@ -844,14 +1684,257 @@ if st.session_state.models_loaded:
             ax1.plot([selected_time], [var2[time_point]], 'ro', markersize=6)
             if var3 is not None:
                 ax1.plot([selected_time], [var3[time_point]], 'ro', markersize=6)
+                if system_type == "Double Pendulum":
+                    ax1.plot([selected_time], [var4[time_point]], 'ro', markersize=6)
         
         ax1.set_xlabel('Time')
         ax1.set_ylabel('Value')
         ax1.legend(loc='upper right')
         ax1.grid(True, alpha=0.3)
-        ax1.set_title(f'{system_type} Solution with Feature Activations')
+        ax1.set_title('System Solution')
         st.pyplot(fig1)
-
+        
+        # Feature activation plot - full width under solution plot
+        fig2, ax2 = plt.subplots(1, 1, figsize=(10, 4))
+        ax2.plot(solution['time_points'], feature_values)
+        
+        # Highlight selected time point
+        selected_time = solution['time_points'][time_point]
+        ax2.axvline(x=selected_time, color='r', linestyle='--', alpha=0.7)
+        ax2.plot([selected_time], [feature_values[time_point]], 'ro', markersize=8)
+        
+        # Highlight top activation times if available
+        if highlight_on_solution and len(top_activation_times) > 0:
+            for t_idx in top_activation_times:
+                t = solution['time_points'][t_idx]
+                ax2.axvline(x=t, color='magenta', alpha=0.3, linewidth=1.5)
+        
+        ax2.set_xlabel('Time')
+        ax2.set_ylabel(f'Feature {feature_idx} Activation')
+        ax2.set_title(f'Feature {feature_idx} Activation Over Time')
+        ax2.grid(True)
+        st.pyplot(fig2)
+        
+        # Always show phase portraits for all systems
+        st.subheader("Phase Portrait")
+        
+        if system_type in ["Harmonic Oscillator", "Van der Pol Oscillator", "Duffing Oscillator"]:
+            # Simple 2D phase portrait colored by feature activations
+            fig_phase, ax_phase = plt.subplots(1, 1, figsize=(8, 8))
+            
+            # Create a colormap for feature activations
+            norm = plt.Normalize(np.min(feature_values), np.max(feature_values))
+            
+            # Use scatter plot with color mapped to feature activation
+            scatter = ax_phase.scatter(var1, var2, c=feature_values, cmap='viridis', 
+                                    norm=norm, s=30, alpha=0.7)
+            
+            # Add a colorbar
+            cbar = plt.colorbar(scatter, ax=ax_phase)
+            cbar.set_label(f'Feature {feature_idx} Activation')
+            
+            # Also add a line to show trajectory
+            ax_phase.plot(var1, var2, 'k-', alpha=0.3, linewidth=0.8)
+            
+            ax_phase.set_xlabel(var1_name)
+            ax_phase.set_ylabel(var2_name)
+            ax_phase.grid(True)
+            ax_phase.set_title(f"{system_type} Phase Portrait (colored by feature activations)")
+            
+            # Mark starting point
+            ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
+            
+            # Mark current time point
+            if time_point < len(var1):
+                ax_phase.plot([var1[time_point]], [var2[time_point]], 'ro', markersize=8, label='Current')
+                
+            ax_phase.legend()
+            st.pyplot(fig_phase)
+            
+        elif system_type in ["Coupled Linear System", "Lotka-Volterra", "FitzHugh-Nagumo"]:
+            # Phase portrait colored by feature activations
+            fig_phase, ax_phase = plt.subplots(1, 1, figsize=(8, 8))
+            
+            # Create a colormap for feature activations
+            norm = plt.Normalize(np.min(feature_values), np.max(feature_values))
+            
+            # Use scatter plot with color mapped to feature activation
+            scatter = ax_phase.scatter(var1, var2, c=feature_values, cmap='viridis', 
+                                    norm=norm, s=30, alpha=0.7)
+            
+            # Add a colorbar
+            cbar = plt.colorbar(scatter, ax=ax_phase)
+            cbar.set_label(f'Feature {feature_idx} Activation')
+            
+            # Also add a line to show trajectory
+            ax_phase.plot(var1, var2, 'k-', alpha=0.3, linewidth=0.8)
+            
+            ax_phase.set_xlabel(var1_name)
+            ax_phase.set_ylabel(var2_name)
+            ax_phase.grid(True)
+            ax_phase.set_title(f"{system_type} Phase Portrait (colored by feature activations)")
+            
+            # Mark starting point
+            ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
+            
+            # Mark current time point
+            if time_point < len(var1):
+                ax_phase.plot([var1[time_point]], [var2[time_point]], 'ro', markersize=8, label='Current')
+                
+            ax_phase.legend()
+            st.pyplot(fig_phase)
+            
+        elif system_type == "Double Pendulum":
+            # Phase portrait with multiple representations
+            fig_phase = plt.figure(figsize=(15, 8))
+            
+            # Create a colormap for feature activations
+            norm = plt.Normalize(np.min(feature_values), np.max(feature_values))
+            
+            # 1. Theta1 vs Theta2
+            ax1 = fig_phase.add_subplot(131)
+            scatter1 = ax1.scatter(var1, var3, c=feature_values, cmap='viridis', 
+                                  norm=norm, s=30, alpha=0.7)
+            ax1.plot(var1, var3, 'k-', alpha=0.3, linewidth=0.5)  # Add trajectory line
+            ax1.set_xlabel("Angle 1 (θ₁)")
+            ax1.set_ylabel("Angle 2 (θ₂)")
+            ax1.grid(True)
+            ax1.set_title("θ₁ vs θ₂")
+            # Add colorbar
+            plt.colorbar(scatter1, ax=ax1, shrink=0.7)
+            ax1.plot(var1[0], var3[0], 'go', markersize=8)
+            if time_point < len(var1):
+                ax1.plot(var1[time_point], var3[time_point], 'ro', markersize=8)
+            
+            # 2. Omega1 vs Omega2
+            ax2 = fig_phase.add_subplot(132)
+            scatter2 = ax2.scatter(var2, var4, c=feature_values, cmap='viridis', 
+                                  norm=norm, s=30, alpha=0.7)
+            ax2.plot(var2, var4, 'k-', alpha=0.3, linewidth=0.5)  # Add trajectory line
+            ax2.set_xlabel("Angular Velocity 1 (ω₁)")
+            ax2.set_ylabel("Angular Velocity 2 (ω₂)")
+            ax2.grid(True)
+            ax2.set_title("ω₁ vs ω₂")
+            # Add colorbar
+            plt.colorbar(scatter2, ax=ax2, shrink=0.7)
+            ax2.plot(var2[0], var4[0], 'go', markersize=8)
+            if time_point < len(var2):
+                ax2.plot(var2[time_point], var4[time_point], 'ro', markersize=8)
+            
+            # 3. Cartesian trajectory if available
+            if 'cartesian_solution' in solution:
+                ax3 = fig_phase.add_subplot(133)
+                cart_sol = solution['cartesian_solution']
+                # Plot pendulum arms
+                for t in range(0, len(times), max(1, len(times)//100)):  # Plot a subset of points
+                    alpha = max(0.05, min(0.5, t/len(times)))
+                    # Draw first pendulum arm
+                    ax3.plot([0, cart_sol[0, t]], [0, cart_sol[1, t]], 'k-', alpha=alpha, linewidth=1)
+                    # Draw second pendulum arm
+                    ax3.plot([cart_sol[0, t], cart_sol[2, t]], [cart_sol[1, t], cart_sol[3, t]], 'k-', alpha=alpha, linewidth=1)
+                
+                # Plot the path of the second pendulum
+                ax3.plot(cart_sol[2, :], cart_sol[3, :], 'b-', alpha=0.5, linewidth=1)
+                
+                # Highlight current position
+                if time_point < cart_sol.shape[1]:
+                    # Current arms as bold lines
+                    ax3.plot([0, cart_sol[0, time_point]], [0, cart_sol[1, time_point]], 'r-', linewidth=2)
+                    ax3.plot([cart_sol[0, time_point], cart_sol[2, time_point]], 
+                             [cart_sol[1, time_point], cart_sol[3, time_point]], 'r-', linewidth=2)
+                    
+                    # Current positions as points
+                    ax3.plot([cart_sol[0, time_point]], [cart_sol[1, time_point]], 'ro', markersize=8)
+                    ax3.plot([cart_sol[2, time_point]], [cart_sol[3, time_point]], 'ro', markersize=8)
+                
+                ax3.set_xlabel("x position")
+                ax3.set_ylabel("y position")
+                ax3.grid(True)
+                ax3.set_title("Cartesian Trajectory")
+                ax3.set_aspect('equal')  # Equal aspect ratio
+                
+                # Set limits with some padding
+                max_val = np.max(np.abs(cart_sol))
+                ax3.set_xlim(-max_val*1.1, max_val*1.1)
+                ax3.set_ylim(-max_val*1.1, max_val*1.1)
+            
+            plt.tight_layout()
+            st.pyplot(fig_phase)
+            
+        elif system_type == "Lorenz System":
+            # 3D Phase portrait colored by feature activations
+            fig_phase = plt.figure(figsize=(10, 8))
+            ax_phase = fig_phase.add_subplot(111, projection='3d')
+            
+            # Create a colormap for feature activations
+            norm = plt.Normalize(np.min(feature_values), np.max(feature_values))
+            
+            # Plot points colored by feature activation
+            scatter = ax_phase.scatter(var1, var2, var3, 
+                                     c=feature_values, cmap='viridis', 
+                                     norm=norm, s=20, alpha=0.7)
+            
+            # Add a colorbar
+            cbar = fig_phase.colorbar(scatter, ax=ax_phase, shrink=0.6, pad=0.1)
+            cbar.set_label(f'Feature {feature_idx} Activation')
+            
+            # Also plot the 3D trajectory as a thin line
+            ax_phase.plot3D(var1, var2, var3, 'k-', linewidth=0.5, alpha=0.3)
+            
+            # Mark starting point
+            ax_phase.scatter([var1[0]], [var2[0]], [var3[0]], color='green', s=100, label='Start')
+            
+            # Mark current time point
+            if time_point < len(var1):
+                ax_phase.scatter([var1[time_point]], [var2[time_point]], [var3[time_point]], 
+                                color='red', s=100, label='Current')
+                
+            ax_phase.set_xlabel(var1_name)
+            ax_phase.set_ylabel(var2_name)
+            ax_phase.set_zlabel(var3_name)
+            ax_phase.legend()
+            ax_phase.set_title("Lorenz Attractor (colored by feature activations)")
+            
+            st.pyplot(fig_phase)
+            
+            # Poincaré section for Lorenz system
+            st.subheader("Poincaré Section")
+            
+            # Compute Poincaré section
+            section_axis = st.session_state.poincare_params['axis']
+            section_value = st.session_state.poincare_params['value']
+            section_direction = st.session_state.poincare_params['direction']
+            
+            poincare_points = compute_poincare_section(
+                solution, 
+                axis=section_axis, 
+                value=section_value, 
+                direction=section_direction
+            )
+            
+            if len(poincare_points) > 0:
+                fig_poincare, ax_poincare = plt.subplots(1, 1, figsize=(8, 8))
+                
+                # Get the other two axes (not the section axis)
+                axis_indices = {'x': 0, 'y': 1, 'z': 2}
+                section_idx = axis_indices[section_axis]
+                other_indices = [i for i in range(3) if i != section_idx]
+                other_names = [name for i, name in enumerate([var1_name, var2_name, var3_name]) if i != section_idx]
+                
+                # Plot the Poincaré section points
+                ax_poincare.scatter(poincare_points[:, 0], poincare_points[:, 1], 
+                                   s=20, alpha=0.7, c=np.arange(len(poincare_points)))
+                
+                ax_poincare.set_xlabel(other_names[0])
+                ax_poincare.set_ylabel(other_names[1])
+                ax_poincare.set_title(f"Poincaré Section at {section_axis}={section_value}")
+                ax_poincare.grid(True)
+                
+                st.pyplot(fig_poincare)
+                st.write(f"Found {len(poincare_points)} intersection points. Direction: {'Positive' if section_direction > 0 else 'Negative' if section_direction < 0 else 'Both'}")
+            else:
+                st.warning("No Poincaré section points found. Try adjusting the section parameters.")
+        
         # Display learned equations alongside original equations
         st.subheader("Model Prediction")
 
@@ -913,6 +1996,47 @@ if st.session_state.models_loaded:
                 - Initial x: {x0}
                 - Initial y: {y0}
                 """)
+            elif system_type == "Van der Pol Oscillator":
+                st.markdown(f"""
+                **Parameters:**
+                - Nonlinearity Parameter (μ): {mu}
+                - Initial Position (x₀): {x0}
+                - Initial Velocity (y₀): {y0}
+                """)
+            elif system_type == "Duffing Oscillator":
+                st.markdown(f"""
+                **Parameters:**
+                - Linear Stiffness (α): {alpha}
+                - Nonlinear Stiffness (β): {beta}
+                - Damping (δ): {delta}
+                - Forcing Amplitude (γ): {gamma}
+                - Forcing Frequency (ω): {omega}
+                - Initial Position (x₀): {x0}
+                - Initial Velocity (y₀): {y0}
+                """)
+            elif system_type == "Double Pendulum":
+                st.markdown(f"""
+                **Parameters:**
+                - Gravity (g): {g}
+                - Mass 1 (m₁): {m1}
+                - Mass 2 (m₂): {m2}
+                - Length 1 (l₁): {l1}
+                - Length 2 (l₂): {l2}
+                - Initial Angle 1 (θ₁): {theta1:.2f} rad
+                - Initial Angular Velocity 1 (ω₁): {omega1}
+                - Initial Angle 2 (θ₂): {theta2:.2f} rad
+                - Initial Angular Velocity 2 (ω₂): {omega2}
+                """)
+            elif system_type == "Lorenz System":
+                st.markdown(f"""
+                **Parameters:**
+                - Sigma (σ): {sigma}
+                - Rho (ρ): {rho}
+                - Beta (β): {beta}
+                - Initial x₀: {x0}
+                - Initial y₀: {y0}
+                - Initial z₀: {z0}
+                """)
 
         with eq_col2:
             st.markdown("#### Learned Equation")
@@ -961,113 +2085,9 @@ if st.session_state.models_loaded:
                             st.markdown(f"{i}. `{eq}` (Error: {eq.error:.6f})")
                         else:
                             st.markdown(f"{i}. `{eq}`")
-
-        # Special plot for Lotka-Volterra - phase space
-        if system_type == "Lotka-Volterra":
-            st.subheader("Phase Space Plot")
-            fig_phase, ax_phase = plt.subplots(1, 1, figsize=(8, 8))
-            ax_phase.plot(var1, var2)
-            ax_phase.set_xlabel(var1_name)
-            ax_phase.set_ylabel(var2_name)
-            ax_phase.grid(True)
-            ax_phase.set_title("Lotka-Volterra Phase Space")
-            # Mark starting point
-            ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
-            # Mark current time point
-            if time_point < len(var1):
-                ax_phase.plot([var1[time_point]], [var2[time_point]], 'ro', markersize=8, label='Current')
-            ax_phase.legend()
-            st.pyplot(fig_phase)
         
-        # Special plot for FitzHugh-Nagumo - phase space
-        if system_type == "FitzHugh-Nagumo":
-            st.subheader("Phase Space Plot")
-            fig_phase, ax_phase = plt.subplots(1, 1, figsize=(8, 8))
-            ax_phase.plot(var1, var2)
-            ax_phase.set_xlabel(var1_name)
-            ax_phase.set_ylabel(var2_name)
-            ax_phase.grid(True)
-            ax_phase.set_title("FitzHugh-Nagumo Phase Space")
-            # Mark starting point
-            ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
-            # Mark current time point
-            if time_point < len(var1):
-                ax_phase.plot([var1[time_point]], [var2[time_point]], 'ro', markersize=8, label='Current')
-            ax_phase.legend()
-            st.pyplot(fig_phase)
-            
-        # Special plot for Coupled Linear System - phase space
-        if system_type == "Coupled Linear System":
-            st.subheader("Phase Space Plot")
-            fig_phase, ax_phase = plt.subplots(1, 1, figsize=(8, 8))
-            ax_phase.plot(var1, var2)
-            ax_phase.set_xlabel(var1_name)
-            ax_phase.set_ylabel(var2_name)
-            ax_phase.grid(True)
-            ax_phase.set_title("Coupled Linear System Phase Space")
-            # Mark starting point
-            ax_phase.plot([var1[0]], [var2[0]], 'go', markersize=8, label='Start')
-            # Mark current time point
-            if time_point < len(var1):
-                ax_phase.plot([var1[time_point]], [var2[time_point]], 'ro', markersize=8, label='Current')
-            ax_phase.legend()
-            st.pyplot(fig_phase)
-        
-        # COMBINED FEATURE EXPLORATION SECTION
-        st.subheader("Feature Exploration")
-        
-        # Add spacing for better visual separation
-        st.write("")
-        
-        # FEATURE SELECTION SECTION - FULL WIDTH
-        st.markdown("### Feature Selection")
-        
-        # Feature selection interface - full width
-        feature_idx = st.slider("Select Feature Index", 0, latent_features.shape[1]-1, feature_idx)
-        
-        # Use horizontal layout for navigation buttons
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            if st.button("◀ Previous", key="dec_feature"):
-                feature_idx = max(0, feature_idx - 1)
-        with col2:
-            if st.button("Next ▶", key="inc_feature"):
-                feature_idx = min(latent_features.shape[1]-1, feature_idx + 1)
-        with col3:
-            feature_input = st.number_input("Direct input:", min_value=0, 
-                                      max_value=latent_features.shape[1]-1, 
-                                      value=feature_idx,
-                                      step=1)
-            if feature_input != feature_idx:
-                feature_idx = feature_input
-        
-        # Save feature_idx to session state
-        st.session_state.feature_idx = feature_idx
-        
-        # Plot feature activation over time - FULL WIDTH
-        feature_values = latent_features[:, feature_idx]
-        fig2, ax2 = plt.subplots(1, 1, figsize=(12, 5))  # Increased size for better visibility
-        ax2.plot(solution['time_points'], feature_values)
-        
-        # Highlight selected time point
-        selected_time = solution['time_points'][time_point]
-        ax2.axvline(x=selected_time, color='r', linestyle='--', alpha=0.7)
-        ax2.plot([selected_time], [feature_values[time_point]], 'ro', markersize=8)
-        
-        # Highlight top activation times if available
-        if highlight_on_solution and len(top_activation_times) > 0:
-            for t_idx in top_activation_times:
-                t = solution['time_points'][t_idx]
-                ax2.axvline(x=t, color='magenta', alpha=0.3, linewidth=1.5)
-        
-        ax2.set_xlabel('Time')
-        ax2.set_ylabel(f'Feature {feature_idx} Activation')
-        ax2.set_title(f'Feature {feature_idx} Activation Over Time')
-        ax2.grid(True)
-        st.pyplot(fig2)
-        
-        # TIME POINT ANALYSIS SECTION - BELOW FEATURE CHART
-        st.markdown("### Time Point Analysis")
+        # TIME POINT ANALYSIS SECTION
+        st.subheader("Time Point Analysis")
         
         # Time point selection interface
         time_point = st.slider("Select Time Point", 0, latent_features.shape[0]-1, time_point)
@@ -1169,10 +2189,92 @@ if st.session_state.models_loaded:
                 x_change = alpha * y
                 y_change = beta * x
                 st.metric("dx/dt", f"{x_change:.4f}")
+                
+        elif system_type == "Van der Pol Oscillator":
+            x = solution['solution'][time_point, 0]
+            y = solution['solution'][time_point, 1]
+            
+            with m_cols[0]:
+                st.metric("Position (x)", f"{x:.4f}")
+            with m_cols[1]:
+                st.metric("Velocity (y)", f"{y:.4f}")
+            with m_cols[2]:
+                # Calculate rate of change
+                y_change = mu * (1 - x**2) * y - x
+                st.metric("dy/dt", f"{y_change:.4f}")
+                
+        elif system_type == "Duffing Oscillator":
+            x = solution['solution'][time_point, 0]
+            y = solution['solution'][time_point, 1]
+            t_val = solution['time_points'][time_point]
+            
+            with m_cols[0]:
+                st.metric("Position (x)", f"{x:.4f}")
+            with m_cols[1]:
+                st.metric("Velocity (y)", f"{y:.4f}")
+            with m_cols[2]:
+                # Calculate rate of change
+                y_change = -delta * y - alpha * x - beta * x**3 + gamma * np.cos(omega * t_val)
+                st.metric("dy/dt", f"{y_change:.4f}")
+                
+        elif system_type == "Double Pendulum":
+            theta1 = solution['solution'][time_point, 0]
+            omega1 = solution['solution'][time_point, 1]
+            theta2 = solution['solution'][time_point, 2]
+            omega2 = solution['solution'][time_point, 3]
+            
+            with m_cols[0]:
+                st.metric("θ₁", f"{theta1:.4f}")
+            with m_cols[1]:
+                st.metric("ω₁", f"{omega1:.4f}")
+            with m_cols[2]:
+                st.metric("θ₂", f"{theta2:.4f}")
+            with m_cols[3]:
+                st.metric("ω₂", f"{omega2:.4f}")
+                
+        elif system_type == "Lorenz System":
+            x = solution['solution'][time_point, 0]
+            y = solution['solution'][time_point, 1]
+            z = solution['solution'][time_point, 2]
+            
+            with m_cols[0]:
+                st.metric("x", f"{x:.4f}")
+            with m_cols[1]:
+                st.metric("y", f"{y:.4f}")
+            with m_cols[2]:
+                st.metric("z", f"{z:.4f}")
+            with m_cols[3]:
+                # Calculate one of the rates of change
+                x_change = sigma * (y - x)
+                st.metric("dx/dt", f"{x_change:.4f}")
         
-        # Show selected feature value in the rightmost column for all system types
-        with m_cols[3]:
-            st.metric(f"Feature {feature_idx} value", f"{feature_values[time_point]:.4f}")
+        # Show selected feature value
+        st.metric(f"Feature {feature_idx} value", f"{feature_values[time_point]:.4f}")
+        
+        # FEATURE EXPLORATION SECTION
+        st.subheader("Feature Exploration")
+        
+        # Feature selection interface
+        feature_idx = st.slider("Select Feature Index", 0, latent_features.shape[1]-1, feature_idx)
+        
+        # Use horizontal layout for navigation buttons
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("◀ Previous", key="dec_feature"):
+                feature_idx = max(0, feature_idx - 1)
+        with col2:
+            if st.button("Next ▶", key="inc_feature"):
+                feature_idx = min(latent_features.shape[1]-1, feature_idx + 1)
+        with col3:
+            feature_input = st.number_input("Direct input:", min_value=0, 
+                                      max_value=latent_features.shape[1]-1, 
+                                      value=feature_idx,
+                                      step=1)
+            if feature_input != feature_idx:
+                feature_idx = feature_input
+        
+        # Save feature_idx to session state
+        st.session_state.feature_idx = feature_idx
         
         # Raw activations option
         show_raw = st.checkbox("Show raw activations", False)
@@ -1222,8 +2324,8 @@ if st.session_state.models_loaded:
         top_n = st.slider("Number of top features to show", 10, 100, 50, step=5)
         top_indices = sorted_indices[:top_n]
         
-        # Create bar chart with gradient coloring - FULL WIDTH
-        fig3, ax3 = plt.subplots(1, 1, figsize=(14, 4))  # Increased width
+        # Create bar chart with gradient coloring
+        fig3, ax3 = plt.subplots(1, 1, figsize=(14, 4))
         
         # Create a colormap for the bars
         bar_colors = plt.cm.viridis(np.linspace(0, 1, len(top_indices)))
@@ -1357,6 +2459,52 @@ if st.session_state.models_loaded:
                         "X": f"{var1_val:.4f}",
                         "Y": f"{var2_val:.4f}"
                     }
+                elif system_type == "Van der Pol Oscillator":
+                    var1_val = solution['solution'][t_idx, 0]  # x
+                    var2_val = solution['solution'][t_idx, 1]  # y
+                    data_entry = {
+                        "Feature": f_idx,
+                        "Time Point": t_idx,
+                        "Time": f"{actual_time:.2f}",
+                        "Activation": f"{values[i]:.4f}",
+                        "X": f"{var1_val:.4f}",
+                        "Y": f"{var2_val:.4f}"
+                    }
+                elif system_type == "Duffing Oscillator":
+                    var1_val = solution['solution'][t_idx, 0]  # x
+                    var2_val = solution['solution'][t_idx, 1]  # y
+                    data_entry = {
+                        "Feature": f_idx,
+                        "Time Point": t_idx,
+                        "Time": f"{actual_time:.2f}",
+                        "Activation": f"{values[i]:.4f}",
+                        "X": f"{var1_val:.4f}",
+                        "Y": f"{var2_val:.4f}"
+                    }
+                elif system_type == "Double Pendulum":
+                    var1_val = solution['solution'][t_idx, 0]  # theta1
+                    var2_val = solution['solution'][t_idx, 2]  # theta2
+                    data_entry = {
+                        "Feature": f_idx,
+                        "Time Point": t_idx,
+                        "Time": f"{actual_time:.2f}",
+                        "Activation": f"{values[i]:.4f}",
+                        "θ₁": f"{var1_val:.4f}",
+                        "θ₂": f"{var2_val:.4f}"
+                    }
+                elif system_type == "Lorenz System":
+                    var1_val = solution['solution'][t_idx, 0]  # x
+                    var2_val = solution['solution'][t_idx, 1]  # y
+                    var3_val = solution['solution'][t_idx, 2]  # z
+                    data_entry = {
+                        "Feature": f_idx,
+                        "Time Point": t_idx,
+                        "Time": f"{actual_time:.2f}",
+                        "Activation": f"{values[i]:.4f}",
+                        "X": f"{var1_val:.4f}",
+                        "Y": f"{var2_val:.4f}",
+                        "Z": f"{var3_val:.4f}"
+                    }
                 
                 top_activations_data.append(data_entry)
             
@@ -1422,6 +2570,21 @@ if st.session_state.models_loaded:
             elif system_type == "Coupled Linear System":
                 color_options["X Value"] = solution['solution'][:, 0]
                 color_options["Y Value"] = solution['solution'][:, 1]
+            elif system_type == "Van der Pol Oscillator":
+                color_options["X Value"] = solution['solution'][:, 0]
+                color_options["Y Value"] = solution['solution'][:, 1]
+            elif system_type == "Duffing Oscillator":
+                color_options["X Value"] = solution['solution'][:, 0]
+                color_options["Y Value"] = solution['solution'][:, 1]
+            elif system_type == "Double Pendulum":
+                color_options["θ₁"] = solution['solution'][:, 0]
+                color_options["ω₁"] = solution['solution'][:, 1]
+                color_options["θ₂"] = solution['solution'][:, 2]
+                color_options["ω₂"] = solution['solution'][:, 3]
+            elif system_type == "Lorenz System":
+                color_options["X Value"] = solution['solution'][:, 0]
+                color_options["Y Value"] = solution['solution'][:, 1]
+                color_options["Z Value"] = solution['solution'][:, 2]
             
             # Add the feature activation as a color option
             color_options[f"Feature {feature_idx} Activation"] = latent_features[:, feature_idx]
