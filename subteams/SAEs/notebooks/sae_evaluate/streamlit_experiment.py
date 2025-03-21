@@ -14,6 +14,21 @@ import time
 import importlib
 from matplotlib.figure import Figure
 import traceback
+import pandas as pd
+
+# Check for dimensionality reduction libraries
+sklearn_available = importlib.util.find_spec("sklearn") is not None
+umap_available = importlib.util.find_spec("umap") is not None
+
+if sklearn_available and umap_available:
+    import sklearn.manifold
+    import umap
+else:
+    missing_libs = []
+    if not sklearn_available:
+        missing_libs.append("scikit-learn")
+    if not umap_available:
+        missing_libs.append("umap-learn")
 
 # Import the activation collector
 from activation_collector import *
@@ -70,6 +85,8 @@ if 'system_type' not in st.session_state:
     st.session_state.system_type = "Harmonic Oscillator"
 if 'current_sae_path' not in st.session_state:
     st.session_state.current_sae_path = None
+if 'learned_equation' not in st.session_state:
+    st.session_state.learned_equation = None
 # New session state variables for activation selection
 if 'activation_site' not in st.session_state:
     st.session_state.activation_site = 'RESIDUAL'
@@ -100,6 +117,50 @@ except ImportError:
     ```
     """)
 
+# Check for dimensionality reduction libraries
+if sklearn_available and umap_available:
+    st.sidebar.success("✅ Found dimensionality reduction libraries")
+else:
+    missing_libs_str = ", ".join(missing_libs) if 'missing_libs' in locals() else "required libraries"
+    st.sidebar.warning(f"⚠️ Missing libraries for dimensionality reduction: {missing_libs_str}")
+    st.sidebar.markdown(f"""
+    To enable t-SNE and UMAP visualizations, install:
+    ```
+    pip install {' '.join(missing_libs) if 'missing_libs' in locals() else "scikit-learn umap-learn"}
+    ```
+    """)
+
+# Function to compute dimensionality reduction with caching
+@st.cache_data
+def compute_dimensionality_reduction(data, method, n_components, **kwargs):
+    """
+    Compute dimensionality reduction with caching.
+    
+    Args:
+        data: Input data (n_samples, n_features)
+        method: 'tsne' or 'umap'
+        n_components: 2 or 3
+        **kwargs: Additional parameters for the method
+        
+    Returns:
+        Reduced dimensionality data
+    """
+    if method == 'tsne':
+        reducer = sklearn.manifold.TSNE(
+            n_components=n_components,
+            random_state=42,
+            **kwargs
+        )
+    elif method == 'umap':
+        reducer = umap.UMAP(
+            n_components=n_components,
+            random_state=42,
+            **kwargs
+        )
+    else:
+        raise ValueError(f"Unknown method: {method}")
+        
+    return reducer.fit_transform(data)
 
 # Only proceed with model imports and loading if paths are added
 if st.sidebar.button("Load Models") or st.session_state.models_loaded:
@@ -437,6 +498,50 @@ def apply_sae(sae_model, activations):
     _, latent = sae_model(inputs)
     return latent.squeeze(0).detach().numpy()
 
+# Function to get learned equations from the model
+def get_learned_equations(model, solution):
+    """
+    Get the learned equations from the ODEformer model.
+    
+    Args:
+        model: The trained ODEformer model
+        solution: The solution dictionary containing time_points and solution data
+        
+    Returns:
+        A dictionary with learned equations and metadata
+    """
+    try:
+        # Extract time points and trajectory data
+        times = solution['time_points']
+        trajectories = solution['solution']
+        
+        # Make predictions with the model
+        learned_eqs = model.predict(times, trajectories)
+        
+        # Get the top predicted equation
+        if learned_eqs and len(learned_eqs) > 0:
+            top_eq = learned_eqs[0] if isinstance(learned_eqs, list) else learned_eqs
+            
+            # Return in a dictionary format
+            return {
+                'equation_str': str(top_eq),
+                'full_results': learned_eqs,
+                'success': True
+            }
+        else:
+            return {
+                'equation_str': "No equations predicted",
+                'full_results': None,
+                'success': False
+            }
+    except Exception as e:
+        print(f"Error getting learned equations: {str(e)}")
+        return {
+            'equation_str': f"Error: {str(e)}",
+            'full_results': None,
+            'success': False
+        }
+
 # Main Streamlit app
 st.title("Dynamic Systems Feature Explorer")
 
@@ -581,6 +686,7 @@ if st.session_state.models_loaded:
         # Clear existing activations and features since parameters changed
         st.session_state.current_activations = None
         st.session_state.current_latent_features = None
+        st.session_state.learned_equation = None
     else:
         solution = st.session_state.current_solution
     
@@ -745,7 +851,117 @@ if st.session_state.models_loaded:
         ax1.grid(True, alpha=0.3)
         ax1.set_title(f'{system_type} Solution with Feature Activations')
         st.pyplot(fig1)
-        
+
+        # Display learned equations alongside original equations
+        st.subheader("Model Prediction")
+
+        # Create columns for side-by-side comparison
+        eq_col1, eq_col2 = st.columns(2)
+
+        with eq_col1:
+            st.markdown("#### Original Equation")
+            st.markdown(f"```\n{solution['equations']}\n```")
+            
+            # Add explanation based on system type
+            if system_type == "Harmonic Oscillator":
+                st.markdown(f"""
+                **Parameters:**
+                - Natural Frequency (ω): {omega}
+                - Damping Coefficient (γ): {gamma}
+                - Initial Position (x₀): {x0}
+                - Initial Velocity (v₀): {v0}
+                """)
+            elif system_type == "Sinusoidal Function":
+                st.markdown(f"""
+                **Parameters:**
+                - Amplitude (A): {amplitude}
+                - Frequency (ω): {frequency}
+                - Phase (φ): {phase}
+                - Function: {'Cosine' if use_cos else 'Sine'}
+                """)
+            elif system_type == "Linear Function":
+                st.markdown(f"""
+                **Parameters:**
+                - Slope (m): {slope}
+                - Intercept (b): {intercept}
+                """)
+            elif system_type == "Lotka-Volterra":
+                st.markdown(f"""
+                **Parameters:**
+                - Prey Growth Rate (α): {alpha}
+                - Predation Rate (β): {beta}
+                - Predator Death Rate (δ): {delta}
+                - Predator Growth from Prey (γ): {gamma}
+                - Initial Prey: {prey0}
+                - Initial Predator: {predator0}
+                """)
+            elif system_type == "FitzHugh-Nagumo":
+                st.markdown(f"""
+                **Parameters:**
+                - Parameter a: {a}
+                - Parameter b: {b}
+                - Time Scale (τ): {tau}
+                - Input Current (I): {I}
+                - Initial v: {v0}
+                - Initial w: {w0}
+                """)
+            elif system_type == "Coupled Linear System":
+                st.markdown(f"""
+                **Parameters:**
+                - Alpha (α): {alpha}
+                - Beta (β): {beta}
+                - Initial x: {x0}
+                - Initial y: {y0}
+                """)
+
+        with eq_col2:
+            st.markdown("#### Learned Equation")
+            
+            # Add a button to run the prediction
+            if st.button("Run ODEformer Prediction"):
+                with st.spinner("Running model to learn equation..."):
+                    # Get learned equations from model
+                    learned_eq_result = get_learned_equations(model, solution)
+                    
+                    if learned_eq_result['success']:
+                        # Format the equation nicely
+                        st.markdown(f"```\n{learned_eq_result['equation_str']}\n```")
+                        
+                        # Store the result in session state
+                        st.session_state.learned_equation = learned_eq_result
+                        
+                        # Add additional details from the result if available
+                        if learned_eq_result['full_results'] and hasattr(learned_eq_result['full_results'], 'error'):
+                            st.markdown(f"**Fit Error:** {learned_eq_result['full_results'].error:.6f}")
+                    else:
+                        st.error(learned_eq_result['equation_str'])
+            else:
+                # Show previous results if available
+                if 'learned_equation' in st.session_state and st.session_state.learned_equation:
+                    st.markdown(f"```\n{st.session_state.learned_equation['equation_str']}\n```")
+                    
+                    # Add additional details from the result if available
+                    if (st.session_state.learned_equation['full_results'] and 
+                        hasattr(st.session_state.learned_equation['full_results'], 'error')):
+                        st.markdown(f"**Fit Error:** {st.session_state.learned_equation['full_results'].error:.6f}")
+                else:
+                    st.info("Click the button to run the ODEformer model and learn the equation for this system")
+
+        # Add extra information from the model if available
+        if 'learned_equation' in st.session_state and st.session_state.learned_equation and st.session_state.learned_equation['success']:
+            with st.expander("Additional Model Details"):
+                # Show beam search results if available
+                if (st.session_state.learned_equation['full_results'] and 
+                    isinstance(st.session_state.learned_equation['full_results'], list) and 
+                    len(st.session_state.learned_equation['full_results']) > 1):
+                    
+                    st.markdown("#### Top Alternative Equations")
+                    for i, eq in enumerate(st.session_state.learned_equation['full_results'][1:5], 2):  # Start from 2nd result
+                        if hasattr(eq, 'error'):
+                            st.markdown(f"{i}. `{eq}` (Error: {eq.error:.6f})")
+                        else:
+                            st.markdown(f"{i}. `{eq}`")
+
         # Special plot for Lotka-Volterra - phase space
         if system_type == "Lotka-Volterra":
             st.subheader("Phase Space Plot")
@@ -1177,7 +1393,240 @@ if st.session_state.models_loaded:
             
             # Allow sorting by clicking on column headers
             st.dataframe(df, use_container_width=True, height=min(400, len(df) * 35 + 38))
+        
+        # Add t-SNE and UMAP visualization section
+        st.markdown("### Dimensionality Reduction Visualization")
+        st.write("Visualize the latent feature vectors using dimensionality reduction techniques.")
+        
+        if sklearn_available and umap_available:
+            dim_reduce_tabs = st.tabs(["t-SNE", "UMAP"])
             
+            # Common color options for both tabs
+            color_options = {
+                "Time Point": np.arange(latent_features.shape[0]),
+            }
+            
+            # Add system-specific color options
+            if system_type == "Harmonic Oscillator":
+                color_options["Position"] = solution['solution'][:, 0]
+                color_options["Velocity"] = solution['solution'][:, 1]
+            elif system_type in ["Sinusoidal Function", "Linear Function"]:
+                color_options["Value"] = solution['solution'][:, 0]
+                color_options["Derivative"] = solution['solution'][:, 1]
+            elif system_type == "Lotka-Volterra":
+                color_options["Prey Population"] = solution['solution'][:, 0]
+                color_options["Predator Population"] = solution['solution'][:, 1]
+            elif system_type == "FitzHugh-Nagumo":
+                color_options["Membrane Potential"] = solution['solution'][:, 0]
+                color_options["Recovery Variable"] = solution['solution'][:, 1]
+            elif system_type == "Coupled Linear System":
+                color_options["X Value"] = solution['solution'][:, 0]
+                color_options["Y Value"] = solution['solution'][:, 1]
+            
+            # Add the feature activation as a color option
+            color_options[f"Feature {feature_idx} Activation"] = latent_features[:, feature_idx]
+            
+            # t-SNE Tab
+            with dim_reduce_tabs[0]:
+                st.subheader("t-SNE Visualization")
+                
+                tsne_col1, tsne_col2 = st.columns(2)
+                
+                with tsne_col1:
+                    tsne_perplexity = st.slider("Perplexity", 5, 100, 30, step=5)
+                    tsne_components = st.radio("Dimensions", [2, 3], horizontal=True)
+                
+                with tsne_col2:
+                    # Set default color to feature activation instead of time point
+                    default_color_index = list(color_options.keys()).index(f"Feature {feature_idx} Activation")
+                    tsne_color_by = st.selectbox("Color by", list(color_options.keys()), index=default_color_index, key='tsne_color')
+                    tsne_cmap = st.selectbox("Color map", ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'coolwarm'], index=0, key='tsne_cmap')
+                
+                if st.button("Generate t-SNE"):
+                    with st.spinner("Computing t-SNE projection..."):
+                        # Reshape latent features for t-SNE input (time_points, features)
+                        tsne_input = latent_features.reshape(latent_features.shape[0], -1)
+                        try:
+                            tsne_result = compute_dimensionality_reduction(
+                                tsne_input, 
+                                method='tsne', 
+                                n_components=tsne_components,
+                                perplexity=tsne_perplexity
+                            )
+                            
+                            # Create the plot
+                            fig_tsne = plt.figure(figsize=(10, 8))
+                            
+                            if tsne_components == 2:
+                                plt.scatter(
+                                    tsne_result[:, 0], 
+                                    tsne_result[:, 1], 
+                                    c=color_options[tsne_color_by], 
+                                    cmap=tsne_cmap
+                                )
+                                plt.colorbar(label=tsne_color_by)
+                                plt.title(f't-SNE Visualization (perplexity={tsne_perplexity})')
+                                plt.xlabel('t-SNE 1')
+                                plt.ylabel('t-SNE 2')
+                                
+                                # Highlight the selected time point
+                                plt.scatter(
+                                    tsne_result[time_point, 0], 
+                                    tsne_result[time_point, 1], 
+                                    color='red', 
+                                    s=100, 
+                                    marker='x', 
+                                    label=f'Time Point {time_point}'
+                                )
+                                plt.legend()
+                            else:
+                                # 3D plot for 3 components
+                                ax = fig_tsne.add_subplot(111, projection='3d')
+                                sc = ax.scatter(
+                                    tsne_result[:, 0], 
+                                    tsne_result[:, 1], 
+                                    tsne_result[:, 2], 
+                                    c=color_options[tsne_color_by], 
+                                    cmap=tsne_cmap
+                                )
+                                plt.colorbar(sc, label=tsne_color_by)
+                                ax.set_title(f't-SNE Visualization (perplexity={tsne_perplexity})')
+                                ax.set_xlabel('t-SNE 1')
+                                ax.set_ylabel('t-SNE 2')
+                                ax.set_zlabel('t-SNE 3')
+                                
+                                # Highlight the selected time point
+                                ax.scatter(
+                                    tsne_result[time_point, 0], 
+                                    tsne_result[time_point, 1], 
+                                    tsne_result[time_point, 2], 
+                                    color='red', 
+                                    s=100, 
+                                    marker='x', 
+                                    label=f'Time Point {time_point}'
+                                )
+                                ax.legend()
+                            
+                            st.pyplot(fig_tsne)
+                            
+                            # Show data table with reduced dimensions
+                            st.subheader("t-SNE Coordinates")
+                            tsne_df = pd.DataFrame(tsne_result, columns=[f't-SNE {i+1}' for i in range(tsne_components)])
+                            tsne_df['Time Point'] = np.arange(tsne_input.shape[0])
+                            tsne_df[tsne_color_by] = color_options[tsne_color_by]
+                            
+                            st.dataframe(tsne_df)
+                        
+                        except Exception as e:
+                            st.error(f"Error computing t-SNE: {str(e)}")
+                            st.code(traceback.format_exc())
+            
+            # UMAP Tab
+            with dim_reduce_tabs[1]:
+                st.subheader("UMAP Visualization")
+                
+                umap_col1, umap_col2 = st.columns(2)
+                
+                with umap_col1:
+                    umap_neighbors = st.slider("Number of Neighbors", 2, 100, 15, step=1)
+                    umap_min_dist = st.slider("Minimum Distance", 0.01, 0.99, 0.1, step=0.01)
+                    umap_components = st.radio("Dimensions", [2, 3], horizontal=True, key="umap_dim")
+                
+                with umap_col2:
+                    # Set default color to feature activation instead of time point
+                    default_color_index = list(color_options.keys()).index(f"Feature {feature_idx} Activation")
+                    umap_color_by = st.selectbox("Color by", list(color_options.keys()), index=default_color_index, key='umap_color')
+                    umap_cmap = st.selectbox("Color map", ['viridis', 'plasma', 'inferno', 'magma', 'cividis', 'coolwarm'], index=0, key='umap_cmap')
+                
+                if st.button("Generate UMAP"):
+                    with st.spinner("Computing UMAP projection..."):
+                        # Reshape latent features for UMAP input (time_points, features)
+                        umap_input = latent_features.reshape(latent_features.shape[0], -1)
+                        try:
+                            umap_result = compute_dimensionality_reduction(
+                                umap_input, 
+                                method='umap', 
+                                n_components=umap_components,
+                                n_neighbors=umap_neighbors,
+                                min_dist=umap_min_dist
+                            )
+                            
+                            # Create the plot
+                            fig_umap = plt.figure(figsize=(10, 8))
+                            
+                            if umap_components == 2:
+                                plt.scatter(
+                                    umap_result[:, 0], 
+                                    umap_result[:, 1], 
+                                    c=color_options[umap_color_by], 
+                                    cmap=umap_cmap
+                                )
+                                plt.colorbar(label=umap_color_by)
+                                plt.title(f'UMAP Visualization (n_neighbors={umap_neighbors}, min_dist={umap_min_dist})')
+                                plt.xlabel('UMAP 1')
+                                plt.ylabel('UMAP 2')
+                                
+                                # Highlight the selected time point
+                                plt.scatter(
+                                    umap_result[time_point, 0], 
+                                    umap_result[time_point, 1], 
+                                    color='red', 
+                                    s=100, 
+                                    marker='x', 
+                                    label=f'Time Point {time_point}'
+                                )
+                                plt.legend()
+                            else:
+                                # 3D plot for 3 components
+                                ax = fig_umap.add_subplot(111, projection='3d')
+                                sc = ax.scatter(
+                                    umap_result[:, 0], 
+                                    umap_result[:, 1], 
+                                    umap_result[:, 2], 
+                                    c=color_options[umap_color_by], 
+                                    cmap=umap_cmap
+                                )
+                                plt.colorbar(sc, label=umap_color_by)
+                                ax.set_title(f'UMAP Visualization (n_neighbors={umap_neighbors}, min_dist={umap_min_dist})')
+                                ax.set_xlabel('UMAP 1')
+                                ax.set_ylabel('UMAP 2')
+                                ax.set_zlabel('UMAP 3')
+                                
+                                # Highlight the selected time point
+                                ax.scatter(
+                                    umap_result[time_point, 0], 
+                                    umap_result[time_point, 1], 
+                                    umap_result[time_point, 2], 
+                                    color='red', 
+                                    s=100, 
+                                    marker='x', 
+                                    label=f'Time Point {time_point}'
+                                )
+                                ax.legend()
+                            
+                            st.pyplot(fig_umap)
+                            
+                            # Show data table with reduced dimensions
+                            st.subheader("UMAP Coordinates")
+                            umap_df = pd.DataFrame(umap_result, columns=[f'UMAP {i+1}' for i in range(umap_components)])
+                            umap_df['Time Point'] = np.arange(umap_input.shape[0])
+                            umap_df[umap_color_by] = color_options[umap_color_by]
+                            
+                            st.dataframe(umap_df)
+                        
+                        except Exception as e:
+                            st.error(f"Error computing UMAP: {str(e)}")
+                            st.code(traceback.format_exc())
+        else:
+            st.warning("""
+            ⚠️ Dimensionality reduction libraries are not available. 
+            
+            To enable t-SNE and UMAP visualizations, install:
+            
+            ```
+            pip install scikit-learn umap-learn
+            ```
+            """)
     else:
         st.error("Failed to solve the selected system with the given parameters.")
 else:
