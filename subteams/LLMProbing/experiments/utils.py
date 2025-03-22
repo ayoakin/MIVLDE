@@ -56,11 +56,12 @@ def plot_from_summary(experiment_summary,  incl_acc=False, descriptor='placehold
     
     # Include both loss and accuracy in plots or just include loss
     if incl_acc:
-        fig, ax = plt.subplots(2, figsize=(8,4))
+        fig, ax = plt.subplots(2, figsize=(8,8))
         ax[0].errorbar(experiment_summary['layer'], experiment_summary['loss_mean'], yerr=experiment_summary['loss_std'], marker='x')
         ax[0].set(title='Probe test loss over layers', xlabel='Layer index', ylabel='Mean loss on test set')
         ax[1].errorbar(experiment_summary['layer'], experiment_summary['accuracy_mean'], yerr=experiment_summary['accuracy_std'], marker='x')
         ax[1].set(title='Probe test accuracy over layers', xlabel='Layer index', ylabel='Mean accuracy on test set')
+        plt.tight_layout()
     else:
         fig, ax = plt.subplots(figsize=(8,4))
         ax.errorbar(experiment_summary['layer'], experiment_summary['loss_mean'], yerr=experiment_summary['loss_std'], marker='x')
