@@ -144,11 +144,14 @@ class ManualSamplesGenerator():
 
     for c_val, a_val in itertools.product(c_values, a_values, desc='Generating exponential samples'):
       trajectory = (c_val * np.exp(-a_val * t_values)).reshape(-1, 1)
+      derivative = (-a_val * c_val * np.exp(-a_val * t_values))
+      derivative_0 = derivative[0]
+      derivative_3 = derivative[3]
       sample_dict = {
           'times': t_values,
           'trajectory': trajectory,
           'parameters': {'a': float(a_val), 'c': float(c_val)}, # Convert to float for better serialization
-          'feature_dict': {"exponential": 1, "hyperbolic": 0},
+          'feature_dict': {"exponential": 1, "hyperbolic": 0, 'derivative_0' : float(derivative_0), 'derivative_3' : float(derivative_3)},
           'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
       }
       manual_samples.append(sample_dict)
@@ -162,11 +165,14 @@ class ManualSamplesGenerator():
 
     for c_val, t0_val in itertools.product(c_values, t0_values, desc='Generating hyperbolic samples'):
       trajectory = (c_val / (t0_val - t_values)).reshape(-1, 1)
+      derivative = (c_val / (t0_val - t_values)**2)
+      derivative_0 = derivative[0]
+      derivative_3 = derivative[3]
       sample_dict = {
           'times': t_values,
           'trajectory': trajectory,
           'parameters': {'t0': float(t0_val), 'c': float(c_val)}, # Convert to float for better serialization
-          'feature_dict': {"exponential": 0, "hyperbolic": 1},
+          'feature_dict': {"exponential": 0, "hyperbolic": 1, "derivative_0" : float(derivative_0), 'derivative_3' : float(derivative_3)},
           'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
       }
       manual_samples.append(sample_dict)
