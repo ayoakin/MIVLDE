@@ -124,6 +124,7 @@ class R2ActivationsDataset(ActivationsDataset):
   A specialized dataset class that extends `ActivationsDataset`, filtering activations based on R^2 score.
 
   This dataset is used for loading activations while ensuring that samples with an infinite R^2 score are excluded.
+  Also allows for activations with r2_score below a specified threshold to be discarded.
 
   Args:
   - activations_path (str): Path to the directory containing activation files.
@@ -144,6 +145,7 @@ class R2ActivationsDataset(ActivationsDataset):
 
     Args:
     - activations_path (str): Path to the directory containing activation files.
+    - r2_threshold (float, optional): Threshold value for r2_score, below which scores should be discarded (default: None).
     - module (str, optional): The type of module to extract activations from (default: 'ffn').
 
     Notes:
