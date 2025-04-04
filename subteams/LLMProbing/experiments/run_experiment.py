@@ -150,6 +150,7 @@ def separability_testing(target_feature, activations_path, \
 def train_and_save_r2_probe(target_layer_idx, activations_path, \
                                     probe_name, probes_path, \
                                     lr, num_epochs, \
+                                    r2_threshold=None, \
                                     shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   Trains a regression probe on activations from a specified transformer layer 
@@ -179,7 +180,7 @@ def train_and_save_r2_probe(target_layer_idx, activations_path, \
   """
 
   # Test dataset, dataloaders, and splitting
-  full_dataset = R2ActivationsDataset(activations_path=activations_path)
+  full_dataset = R2ActivationsDataset(activations_path=activations_path, r2_threshold=r2_threshold)
   train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
   train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=shuffle_datasets)
   if use_val:
@@ -210,6 +211,7 @@ def train_and_save_r2_probe(target_layer_idx, activations_path, \
 
 def r2_prediction_experiment(activations_path, probes_path, \
                             lr, num_epochs, \
+                            r2_threshold=None, \
                             num_repeats=1, \
                             shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
@@ -254,6 +256,7 @@ def r2_prediction_experiment(activations_path, probes_path, \
     test_loss, final_train_loss, final_val_loss = train_and_save_r2_probe(target_layer_idx=-1, activations_path=activations_path, \
                                                                              probe_name=probe_name, probes_path=probes_path, \
                                                                              lr=lr, num_epochs=num_epochs, \
+                                                                             r2_threshold=r2_threshold, \
                                                                              shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
     
     # Add relevant data to the experiment results
@@ -272,6 +275,7 @@ def r2_prediction_experiment(activations_path, probes_path, \
 
 def load_and_run_r2_prediction_experiment(activations_path, \
                          probes_path, \
+                         r2_threshold=None, \
                          num_repeats=1, \
                          shuffle_datasets=True, use_val=True, data_split=[0.8, 0.1, 0.1]):
   """
@@ -290,7 +294,7 @@ def load_and_run_r2_prediction_experiment(activations_path, \
 
   experiment_data = []
 
-  full_dataset = R2ActivationsDataset(activations_path=activations_path, layer_idx=15)
+  full_dataset = R2ActivationsDataset(activations_path=activations_path, r2_threshold=r2_threshold)
   train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
   if use_val:
     val_dataloader = DataLoader(val_dataset, shuffle=shuffle_datasets)
