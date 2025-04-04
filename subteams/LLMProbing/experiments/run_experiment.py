@@ -4,7 +4,10 @@ from torch.utils.data import DataLoader
 from src.datasets.activations_dataset import ActivationsDataset, R2ActivationsDataset
 from src.datasets.utils import split_dataset, get_d_in
 from src.probes.lr_probe import LRProbe
-from src.probes.utils import train_classifier_probe, train_regression_probe, eval_classifier_probe, eval_regression_probe, save_probe_to_path
+from src.probes.utils import train_classifier_probe, train_regression_probe, eval_classifier_probe, \
+  eval_regression_probe, save_probe_to_path, load_probe_from_path
+
+# TODO: fix val_loss etc. when use_val = False
 
 def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activations_path, \
                                          probe_name, probes_path, \
@@ -368,6 +371,61 @@ def scalar_prediction_experiment(target_feature, activations_path, \
           "test_loss": test_loss,
           "final_train_loss": final_train_loss,
           "final_val_loss": final_val_loss,
+        })
+
+  experiment_data = pd.DataFrame(data=experiment_data)
+
+  return experiment_data
+
+def load_and_run_scalar_prediction_experiment(target_feature, activations_path, \
+                         probes_path, \
+                         layers, num_repeats=1, \
+                         shuffle_datasets=True, use_val=True, data_split=[0.8, 0.1, 0.1]):
+  """
+  Loads and evaluates regression probes on activations from a specified list of transformer layers to predict a scalar feature. Loads a number of probes up to num_repeats based on how many were repeats trained.
+
+  Returns:
+  - experiment_data (pd.DataFrame): A DataFrame containing results for each experiment run, with the following columns:
+    - "run" (int): Experiment repetition index.
+    - "test_loss" (float): Loss on the test dataset.
+
+  Notes:
+  - This function iterates over the specified `layers` and loads and evaluates a probe trained for each one.
+  - Results are stored in a DataFrame for further analysis.
+  """
+
+  experiment_data = []
+
+  # Iterate over the specified layers
+  for layer_idx in layers:
+    full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=layer_idx)
+    train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
+    if use_val:
+      val_dataloader = DataLoader(val_dataset, shuffle=shuffle_datasets)
+    test_dataloader = DataLoader(test_dataset, shuffle=shuffle_datasets)
+    # Load the specified number of repeats
+    for run in range(num_repeats):
+      print(f'Repeat {run} of layer {layer_idx}')
+
+      d_in = get_d_in(full_dataset)
+
+      # Load probe based on expected naming format
+      probe_name = f'probe_{target_feature}_{layer_idx}_{run}.pt'
+      probe = load_probe_from_path(f'{probes_path}/{probe_name}', d_in=d_in)
+
+      # Evaluate the loaded probe on test set
+      if use_val:
+        val_loss = eval_regression_probe(probe, val_dataloader)
+      else:
+        val_loss = -1
+      test_loss = eval_regression_probe(probe, test_dataloader)
+
+      # Add relevant data to the experiment results
+      experiment_data.append({
+          "layer": layer_idx,
+          "run": run,
+          "test_loss": test_loss,
+          "val_loss": val_loss
         })
 
   experiment_data = pd.DataFrame(data=experiment_data)
