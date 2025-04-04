@@ -134,7 +134,7 @@ class R2ActivationsDataset(ActivationsDataset):
   - __getitem__(idx): Retrieves an activation sample, its label, and its ID from the filtered dataset.
   """
 
-  def __init__(self, activations_path, module='ffn'):
+  def __init__(self, activations_path, r2_threshold=None, module='ffn'):
     """
     Initializes the dataset by filtering out samples with infinite R^2 scores.
 
@@ -155,10 +155,20 @@ class R2ActivationsDataset(ActivationsDataset):
             with open(path, 'rb') as f:
                 activation = pickle.load(f)
             feature_value = activation['feature_dict']['r2_score']
+
+            allow_path = True            
             
             # Exclude paths where r2_score is inf
-            if not torch.isinf(torch.tensor(feature_value, dtype=torch.float)).item():
-                filtered_paths.append(path)
+            if torch.isinf(torch.tensor(feature_value, dtype=torch.float)).item():
+              allow_path = False
+            
+            # Exclude paths where r2_score falls below a specified threshold (optional)
+            if r2_threshold is not None and torch.tensor(feature_value, dtype=torch.float) < r2_threshold:
+              allow_path = False
+
+            # Append path if valid
+            if allow_path:
+              filtered_paths.append(path)
         except Exception as e:
             print(f"Warning: Failed to process {path} due to {e}")
 
