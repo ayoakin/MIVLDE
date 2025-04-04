@@ -269,6 +269,60 @@ def r2_prediction_experiment(activations_path, probes_path, \
 
   return experiment_data
 
+
+def load_and_run_r2_prediction_experiment(activations_path, \
+                         probes_path, \
+                         num_repeats=1, \
+                         shuffle_datasets=True, use_val=True, data_split=[0.8, 0.1, 0.1]):
+  """
+  Loads and evaluates regression probes on activations from a specified list of transformer layers to predict R^2 score.
+  Loads a number of probes up to num_repeats based on how many were repeats trained.
+
+  Returns:
+  - experiment_data (pd.DataFrame): A DataFrame containing results for each experiment run, with the following columns:
+    - "run" (int): Experiment repetition index.
+    - "test_loss" (float): Loss on the test dataset.
+
+  Notes:
+  - This function iterates over the specified `layers` and loads and evaluates a probe trained for each one.
+  - Results are stored in a DataFrame for further analysis.
+  """
+
+  experiment_data = []
+
+  full_dataset = R2ActivationsDataset(activations_path=activations_path, layer_idx=15)
+  train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
+  if use_val:
+    val_dataloader = DataLoader(val_dataset, shuffle=shuffle_datasets)
+  test_dataloader = DataLoader(test_dataset, shuffle=shuffle_datasets)
+  # Load the specified number of repeats
+  for run in range(num_repeats):
+    print(f'Repeat {run} of layer {15}')
+
+    d_in = get_d_in(full_dataset)
+
+    # Load probe based on expected naming format
+    probe_name = f'probe_r2_{run}.pt'
+    probe = load_probe_from_path(f'{probes_path}/{probe_name}', d_in=d_in)
+
+    # Evaluate the loaded probe on test set
+    if use_val:
+      val_loss = eval_regression_probe(probe, val_dataloader)
+    else:
+      val_loss = -1
+    test_loss = eval_regression_probe(probe, test_dataloader)
+
+    # Add relevant data to the experiment results
+    experiment_data.append({
+        "run": run,
+        "test_loss": test_loss,
+        "final_val_loss": val_loss
+      })
+
+  experiment_data = pd.DataFrame(data=experiment_data)
+
+  return experiment_data
+
 def train_and_save_scalar_prediction_probe(target_layer_idx, target_feature, activations_path, \
                                          probe_name, probes_path, \
                                          lr, num_epochs, \
