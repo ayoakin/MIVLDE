@@ -127,11 +127,15 @@ class R2ActivationsDataset(ActivationsDataset):
 
   Args:
   - activations_path (str): Path to the directory containing activation files.
+  - r2_threshold (float, optional): Threshold value for r2_score, below which scores should be discarded (default: None).
   - module (str, optional): The type of module to extract activations from (default: 'ffn').
 
   Methods:
   - __len__(): Returns the number of valid activation samples.
   - __getitem__(idx): Retrieves an activation sample, its label, and its ID from the filtered dataset.
+
+  Notes:
+  - Recall that r2_score should vary from (-inf, 1] when setting a value for the threshold
   """
 
   def __init__(self, activations_path, r2_threshold=None, module='ffn'):
