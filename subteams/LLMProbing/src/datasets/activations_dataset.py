@@ -71,10 +71,8 @@ class ActivationsDataset(Dataset):
       act_data = activation['encoder'][layer_name]
     else:
       act_data = activation['decoder'][layer_name]
-    # # TODO: need to update the below functionality to be neater (needs to work with activation generation script)
-    # if act_data.shape[0] != 512: # TODO: need to update this for when we consider multiple beams
-    #   act_data = act_data[-1, :, :].flatten()
-    act_data = act_data[:, :, :].flatten()  
+    if act_data.shape[0] != 512: # TODO: need to update this for when we consider multiple beams
+      act_data = act_data[0, :, :].flatten()
     act_label = torch.tensor(activation['feature_dict'][self.feature_label], dtype=torch.float)
     act_id = self.get_id_from_path(act_path)
     return act_data, act_label, act_id
