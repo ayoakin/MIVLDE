@@ -24,7 +24,7 @@ class ActivationsDataset(Dataset):
   - get_id_from_path(act_path): Extracts and returns the sample ID from the activation file path.
   """
 
-  def __init__(self, activations_path, feature_label, layer_idx, module='ffn'):
+  def __init__(self, activations_path, feature_label, layer_idx, r2_threshold=None, module='ffn'):
     """
     Initialises the dataset by collecting activation file paths and setting parameters.
 
@@ -32,9 +32,37 @@ class ActivationsDataset(Dataset):
     - activations_path (str): Path to the directory containing activation files.
     - feature_label (str): The key used to extract the target feature from the activation metadata.
     - layer_idx (int): The index of the layer from which activations should be extracted.
+    - r2_threshold (float, optional): Threshold value for r2_score, below which scores should be discarded (default: None).
     - module (str, optional): The type of module to extract activations from (default: 'ffn').
     """
-    self.act_paths = [os.path.join(activations_path, f) for f in os.listdir(activations_path)]
+    all_paths = [os.path.join(activations_path, f) for f in os.listdir(activations_path)]
+    if r2_threshold is None:
+      self.act_paths = all_paths
+    else:
+      filtered_paths = []
+      for path in all_paths:
+        try:
+            with open(path, 'rb') as f:
+                activation = pickle.load(f)
+            feature_value = activation['feature_dict']['r2_score']
+
+            allow_path = True            
+            
+            # Exclude paths where r2_score is inf
+            if torch.isinf(torch.tensor(feature_value, dtype=torch.float)).item():
+              allow_path = False
+            
+            # Exclude paths where r2_score falls below a specified threshold (optional)
+            if r2_threshold is not None and torch.tensor(feature_value, dtype=torch.float) < r2_threshold:
+              allow_path = False
+
+            # Append path if valid
+            if allow_path:
+              filtered_paths.append(path)
+        except Exception as e:
+            print(f"Warning: Failed to process {path} due to {e}")
+        self.act_paths = filtered_paths
+    # self.act_paths = [os.path.join(activations_path, f) for f in os.listdir(activations_path)]
     self.feature_label = feature_label
     self.layer_idx = layer_idx
     self.module = module
