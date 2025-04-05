@@ -12,6 +12,7 @@ from src.probes.utils import train_classifier_probe, train_regression_probe, eva
 def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activations_path, \
                                          probe_name, probes_path, \
                                          lr, num_epochs, \
+                                         r2_threshold=None, \
                                          shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   Trains a logistic regression probe on activations from a specified transformer layer 
@@ -41,7 +42,7 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
   """
 
   # Test dataset, dataloaders, and splitting
-  full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=target_layer_idx)
+  full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=target_layer_idx, r2_threshold=r2_threshold)
   train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
   train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=shuffle_datasets)
   if use_val:
@@ -76,6 +77,7 @@ def separability_testing(target_feature, activations_path, \
                          probes_path, \
                          lr, num_epochs, \
                          layers, num_repeats=1, \
+                         r2_threshold=None, \
                          shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   Trains and evaluates logistic regression probes on activations from a specified list of transformer layers 
@@ -128,6 +130,7 @@ def separability_testing(target_feature, activations_path, \
         final_val_loss, final_val_acc = train_and_save_probe_separation_expt(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
           probe_name=probe_name, probes_path=probes_path, \
           lr=lr, num_epochs=num_epochs, \
+          r2_threshold=r2_threshold, \
           shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
 
       # Add relevant data to the experiment results
@@ -330,6 +333,7 @@ def load_and_run_r2_prediction_experiment(activations_path, \
 def train_and_save_scalar_prediction_probe(target_layer_idx, target_feature, activations_path, \
                                          probe_name, probes_path, \
                                          lr, num_epochs, \
+                                         r2_threshold=None, \
                                          shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   Trains a linear regression probe on activations from a specified transformer layer to predict a scalar feature of odeformer's candidate equation. The trained probe is then evaluated and saved.
@@ -354,7 +358,7 @@ def train_and_save_scalar_prediction_probe(target_layer_idx, target_feature, act
   """
 
   # Test dataset, dataloaders, and splitting
-  full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=target_layer_idx)
+  full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=target_layer_idx, r2_threshold=r2_threshold)
   train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
   train_dataloader = DataLoader(train_dataset, batch_size=16, shuffle=shuffle_datasets)
   if use_val:
@@ -387,6 +391,7 @@ def scalar_prediction_experiment(target_feature, activations_path, \
                          probes_path, \
                          lr, num_epochs, \
                          layers, num_repeats=1, \
+                         r2_threshold=None, \
                          shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
   """
   Trains and evaluates regression probes on activations from a specified list of transformer layers to predict a scalar feature. Each probe training is repeated multiple times to account for initialisation randomness.
@@ -420,6 +425,7 @@ def scalar_prediction_experiment(target_feature, activations_path, \
       test_loss, final_train_loss, final_val_loss = train_and_save_scalar_prediction_probe(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
           probe_name=probe_name, probes_path=probes_path, \
           lr=lr, num_epochs=num_epochs, \
+          r2_threshold=r2_threshold, \
           shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, write_log=write_log)
 
       # Add relevant data to the experiment results
@@ -438,6 +444,7 @@ def scalar_prediction_experiment(target_feature, activations_path, \
 def load_and_run_scalar_prediction_experiment(target_feature, activations_path, \
                          probes_path, \
                          layers, num_repeats=1, \
+                         r2_threshold=None, \
                          shuffle_datasets=True, use_val=True, data_split=[0.8, 0.1, 0.1]):
   """
   Loads and evaluates regression probes on activations from a specified list of transformer layers to predict a scalar feature. Loads a number of probes up to num_repeats based on how many were repeats trained.
@@ -456,7 +463,7 @@ def load_and_run_scalar_prediction_experiment(target_feature, activations_path, 
 
   # Iterate over the specified layers
   for layer_idx in layers:
-    full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=layer_idx)
+    full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=layer_idx, r2_threshold=r2_threshold)
     train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
     if use_val:
       val_dataloader = DataLoader(val_dataset, shuffle=shuffle_datasets)
