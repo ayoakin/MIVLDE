@@ -200,7 +200,7 @@ def train_and_save_r2_probe(target_layer_idx, activations_path, \
     probe, train_losses, val_losses = train_regression_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
 
   # Evaluation on test set
-  test_loss = eval_regression_probe(probe, test_dataloader)
+  test_loss, test_r2, test_spearman, test_pearson = eval_regression_probe(probe, test_dataloader)
   print(f'Regression probe trained on layer {target_layer_idx}: Test Set Loss {test_loss}')
 
   # Save probe
@@ -314,10 +314,10 @@ def load_and_run_r2_prediction_experiment(activations_path, \
 
     # Evaluate the loaded probe on test set
     if use_val:
-      val_loss = eval_regression_probe(probe, val_dataloader)
+      val_loss, val_r2, val_spearman, val_pearson = eval_regression_probe(probe, val_dataloader)
     else:
       val_loss = -1
-    test_loss = eval_regression_probe(probe, test_dataloader)
+    test_loss, test_r2, test_spearman, test_pearson = eval_regression_probe(probe, test_dataloader)
 
     # Add relevant data to the experiment results
     experiment_data.append({
@@ -355,6 +355,9 @@ def train_and_save_scalar_prediction_probe(target_layer_idx, target_feature, act
   - test_loss (float): Loss on the test dataset.
   - final_train_loss (float): Final training loss after the last epoch.
   - final_val_loss (float or None): Final validation loss after the last epoch (None if `use_val=False`).
+  - test_r2 (float) : test R² score
+  - test_spearman (float) : test Spearman rank correlation coefficient
+  - test_pearson (float) : test Pearson correlation coefficient
   """
 
   # Test dataset, dataloaders, and splitting
@@ -375,7 +378,7 @@ def train_and_save_scalar_prediction_probe(target_layer_idx, target_feature, act
     probe, train_losses, val_losses = train_regression_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
 
   # Evaluation on test set
-  test_loss = eval_regression_probe(probe, test_dataloader)
+  test_loss, test_r2, test_spearman, test_pearson = eval_regression_probe(probe, test_dataloader)
   print(f'Regression probe trained on layer {target_layer_idx}: Test Set Loss {test_loss}')
 
   # Save probe
@@ -385,7 +388,7 @@ def train_and_save_scalar_prediction_probe(target_layer_idx, target_feature, act
 
   final_train_loss = train_losses[-1]
   final_val_loss = val_losses[-1]
-  return test_loss, final_train_loss, final_val_loss
+  return test_loss, final_train_loss, final_val_loss, test_r2, test_spearman, test_pearson
 
 def scalar_prediction_experiment(target_feature, activations_path, \
                          probes_path, \
@@ -422,7 +425,7 @@ def scalar_prediction_experiment(target_feature, activations_path, \
       probe_name = f'probe_{target_feature}_{layer_idx}_{run}.pt'
       
       # Train and save the probe for the correct layer
-      test_loss, final_train_loss, final_val_loss = train_and_save_scalar_prediction_probe(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
+      test_loss, final_train_loss, final_val_loss, test_r2, test_spearman, test_pearson = train_and_save_scalar_prediction_probe(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
           probe_name=probe_name, probes_path=probes_path, \
           lr=lr, num_epochs=num_epochs, \
           r2_threshold=r2_threshold, \
@@ -435,6 +438,9 @@ def scalar_prediction_experiment(target_feature, activations_path, \
           "test_loss": test_loss,
           "final_train_loss": final_train_loss,
           "final_val_loss": final_val_loss,
+          "test_r2" : test_r2,
+          "test_spearman" : test_spearman,
+          "test_pearson" : test_pearson
         })
 
   experiment_data = pd.DataFrame(data=experiment_data)
@@ -480,17 +486,26 @@ def load_and_run_scalar_prediction_experiment(target_feature, activations_path, 
 
       # Evaluate the loaded probe on test set
       if use_val:
-        val_loss = eval_regression_probe(probe, val_dataloader)
+        val_loss, val_r2, val_spearman, val_pearson = eval_regression_probe(probe, val_dataloader)
       else:
         val_loss = -1
-      test_loss = eval_regression_probe(probe, test_dataloader)
+        val_r2 = -1
+        val_spearman = -1
+        val_pearson = -1
+      test_loss, test_r2, test_spearman, test_pearson = eval_regression_probe(probe, test_dataloader)
 
       # Add relevant data to the experiment results
       experiment_data.append({
           "layer": layer_idx,
           "run": run,
+          "val_loss": val_loss,
+          "val_r2" : val_r2,
+          "val_spearman" : val_spearman,
+          "val_pearson" : val_pearson,
           "test_loss": test_loss,
-          "val_loss": val_loss
+          "test_r2" : test_r2,
+          "test_spearman" : test_spearman,
+          "test_pearson" : test_pearson
         })
 
   experiment_data = pd.DataFrame(data=experiment_data)

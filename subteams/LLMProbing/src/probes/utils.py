@@ -2,7 +2,11 @@ import torch
 import datetime
 import os
 from tqdm import tqdm
+from sklearn.metrics import r2_score
+from scipy.stats import spearmanr, pearsonr
 from src.probes.lr_probe import LRProbe
+
+
 
 def eval_classifier_probe(probe, dataloader):
   '''
@@ -56,10 +60,16 @@ def eval_regression_probe(probe, dataloader):
 
   Returns:
   - avg_loss (float): average loss (MSE loss) on the given dataset
+  - r2 (float): R² score
+  - spearman (float): Spearman rank correlation coefficient
+  - pearson (float): Pearson correlation coefficient
+
   '''
   with torch.no_grad():
     total_loss = 0
     total_preds = 0
+    all_preds = []
+    all_labels = []
     # criterion = torch.nn.MSELoss()
 
     probe.eval()
@@ -72,8 +82,20 @@ def eval_regression_probe(probe, dataloader):
 
       total_preds += len(labels)
 
+      if outputs.ndim == 0:  
+          all_preds.append(outputs.item())
+          all_labels.append(labels.item())
+      else:  
+          all_preds.extend(outputs.cpu().numpy())  
+          all_labels.extend(labels.cpu().numpy())  
+
+
     avg_loss = total_loss / total_preds
-    return avg_loss
+    r2 = r2_score(all_labels, all_preds)
+    spearman, _ = spearmanr(all_labels, all_preds)
+    pearson, _ = pearsonr(all_labels, all_preds)
+
+    return avg_loss, r2, spearman, pearson
 
 def train_classifier_probe(probe, train_dataloader, val_dataloader=None, \
                 lr=0.01, num_epochs=20, device='cpu', \
