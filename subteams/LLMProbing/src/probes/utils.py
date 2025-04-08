@@ -97,6 +97,40 @@ def eval_regression_probe(probe, dataloader):
 
     return avg_loss, r2, spearman, pearson
 
+def verbose_eval_regression_probe(probe, dataloader):
+  '''
+  Evaluate a given regression probe (e.g. for predicting R^2 score) on a specified dataset (via its corresponding dataloader).
+
+  Args:
+  - probe (LRProbe): (regression) probe to be evaluated
+  - dataloader (torch.utils.data.DataLoader): dataloader for dataset on which the probe is to be evaluated
+
+  Returns:
+  - eval_results (list[tuple]): 
+  - avg_loss (float): average loss (MSE loss) on the given dataset
+  '''
+  with torch.no_grad():
+    total_loss = 0
+    total_preds = 0
+
+    eval_results = []
+
+    probe.eval()
+
+    for acts, labels, ids in dataloader:
+      outputs = probe(acts)
+      diff = (labels - outputs)
+      square_errors = torch.square(diff).item()
+      for batch_idx in range(len(acts)):
+        datapoint = (acts[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx])
+        eval_results.append(datapoint)
+      total_loss += torch.square(diff).sum().item()
+
+      total_preds += len(labels)
+
+    avg_loss = total_loss / total_preds
+    return eval_results, avg_loss
+
 def train_classifier_probe(probe, train_dataloader, val_dataloader=None, \
                 lr=0.01, num_epochs=20, device='cpu', \
                 logs_path='/content/drive/MyDrive/aisc/logs', write_log=False): # TODO: determine if default hyperparameters are good
