@@ -106,7 +106,7 @@ def verbose_eval_regression_probe(probe, dataloader):
   - dataloader (torch.utils.data.DataLoader): dataloader for dataset on which the probe is to be evaluated
 
   Returns:
-  - eval_results (list[tuple]): 
+  - eval_results (list[list]): 
   - avg_loss (float): average loss (MSE loss) on the given dataset
   '''
   with torch.no_grad():
@@ -122,7 +122,7 @@ def verbose_eval_regression_probe(probe, dataloader):
       diff = (labels - outputs)
       square_errors = torch.square(diff).item()
       for batch_idx in range(len(acts)):
-        datapoint = (outputs[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx])
+        datapoint = [outputs[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx]]
         eval_results.append(datapoint)
       total_loss += torch.square(diff).sum().item()
 
