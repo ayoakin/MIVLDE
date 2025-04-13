@@ -42,7 +42,11 @@ def summarise_experiment(experiment_data, incl_acc=False, incl_extras=False):
 
     return experiment_summary
 
+<<<<<<< HEAD
 def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
+=======
+def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,descriptor='placeholder', in_notebook=True, fig_dir='plots/', layers = None):
+>>>>>>> 89c83be (option to specify which layers to plot experiment results for)
     """
     Plots the mean and standard deviation of test loss (and optionally accuracy or extras (r2, spearman, pearson)) across transformer layers
     from an experiment summary.
@@ -70,7 +74,8 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False, de
     - If `in_notebook=False`, the plot is saved as a high-resolution PNG file.
     - Ensure that `experiment_summary` contains the required statistics before calling this function.
     """
-    
+    if layers:
+      experiment_summary = experiment_summary[experiment_summary['layer'].isin(layers)]
     # Include both loss and accuracy in plots or just include loss
     if incl_acc:
         fig, ax = plt.subplots(2, figsize=(8,8))
@@ -80,7 +85,11 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False, de
         ax[1].set(title='Probe test accuracy over layers', xlabel='Layer index', ylabel='Mean accuracy on test set')
         plt.tight_layout()
     elif incl_extras:
+<<<<<<< HEAD
         fig, ax = plt.subplots(4, figsize=(8,16)) # TODO: determine best figsize
+=======
+        fig, ax = plt.subplots(4, figsize=(8,16))
+>>>>>>> 89c83be (option to specify which layers to plot experiment results for)
         ax[0].errorbar(experiment_summary['layer'], experiment_summary['loss_mean'], yerr=experiment_summary['loss_std'], marker='x')
         ax[0].set(title='Probe test loss over layers', xlabel='Layer index', ylabel='Mean loss on test set')
         ax[1].errorbar(experiment_summary['layer'], experiment_summary['r2_mean'], yerr=experiment_summary['r2_std'], marker='x')
