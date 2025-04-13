@@ -2,6 +2,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 sns.set_theme()
+from src.probes.utils import verbose_eval_regression_probe
+from scipy.stats import spearmanr
 
 def summarise_experiment(experiment_data, incl_acc=False, incl_extras=False):
     """
@@ -39,7 +41,7 @@ def summarise_experiment(experiment_data, incl_acc=False, incl_extras=False):
 
     return experiment_summary
 
-def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
+def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
     """
     Plots the mean and standard deviation of test loss (and optionally accuracy or extras (r2, spearman, pearson)) across transformer layers
     from an experiment summary.
@@ -77,7 +79,7 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,des
         ax[1].set(title='Probe test accuracy over layers', xlabel='Layer index', ylabel='Mean accuracy on test set')
         plt.tight_layout()
     elif incl_extras:
-        fig, ax = plt.subplots(4, figsize=(8,8))
+        fig, ax = plt.subplots(4, figsize=(8,16)) # TODO: determine best figsize
         ax[0].errorbar(experiment_summary['layer'], experiment_summary['loss_mean'], yerr=experiment_summary['loss_std'], marker='x')
         ax[0].set(title='Probe test loss over layers', xlabel='Layer index', ylabel='Mean loss on test set')
         ax[1].errorbar(experiment_summary['layer'], experiment_summary['r2_mean'], yerr=experiment_summary['r2_std'], marker='x')
@@ -98,5 +100,30 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,des
     else:
         fig_path = f'{fig_dir}/expt_plot_{descriptor}.png'
         plt.savefig(fig_path, dpi=300)
+    return
 
+def plot_scalar_predictions(probe, test_dataloader, feature_descriptor, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
+    test_results, avg_test_loss = verbose_eval_regression_probe(probe, test_dataloader)
+    probe_outputs = [test_results[i][0] for i in range(len(test_results))]
+    ground_truths = [test_results[i][1] for i in range(len(test_results))]
+    fig, ax = plt.subplots(figsize=(8,8))
+    ax.scatter(ground_truths, probe_outputs, alpha=0.3, color='tab:blue')
+    gt_minimal_set = [ground_truths[0], ground_truths[-1]]
+    ax.plot(gt_minimal_set, gt_minimal_set, color='tab:red')
+    ax.set(xlabel='Ground Truth', ylabel='Probe Prediction', title=f'{feature_descriptor} Prediction')
+
+    spearman_corr, _ = spearmanr(ground_truths, probe_outputs)
+    
+    plt.annotate(f"Spearman r={spearman_corr:.3f}",
+                xy=(0.95, 0.05),  # bottom-right in axes coords
+                xycoords='axes fraction',
+                ha='right', fontsize=10)
+
+    plt.tight_layout()
+
+    if in_notebook:
+        plt.show()
+    else:
+        fig_path = f'{fig_dir}/regression_expt_plot_{descriptor}.png'
+        plt.savefig(fig_path, dpi=300)
     return
