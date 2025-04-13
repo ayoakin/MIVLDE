@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -104,8 +105,8 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False, de
 
 def plot_scalar_predictions(probe, test_dataloader, feature_descriptor, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
     test_results, avg_test_loss = verbose_eval_regression_probe(probe, test_dataloader)
-    probe_outputs = [test_results[i][0] for i in range(len(test_results))]
-    ground_truths = [test_results[i][1] for i in range(len(test_results))]
+    probe_outputs = np.array([test_results[i][0] for i in range(len(test_results))])
+    ground_truths = np.array([test_results[i][1] for i in range(len(test_results))])
     fig, ax = plt.subplots(figsize=(8,8))
     ax.scatter(ground_truths, probe_outputs, alpha=0.3, color='tab:blue')
     gt_minimal_set = [min(ground_truths), max(ground_truths)]
