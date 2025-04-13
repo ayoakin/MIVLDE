@@ -122,7 +122,7 @@ def verbose_eval_regression_probe(probe, dataloader):
       diff = (labels - outputs)
       square_errors = torch.square(diff).item()
       for batch_idx in range(len(acts)):
-        datapoint = (acts[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx])
+        datapoint = (outputs[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx])
         eval_results.append(datapoint)
       total_loss += torch.square(diff).sum().item()
 
