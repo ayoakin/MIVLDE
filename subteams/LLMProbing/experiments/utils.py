@@ -2,9 +2,13 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-sns.set_theme()
-from src.probes.utils import verbose_eval_regression_probe
+from src.probes.utils import verbose_eval_regression_probe, load_probe_from_path
 from scipy.stats import spearmanr
+from src.datasets.activations_dataset import ActivationsDataset
+from src.datasets.utils import split_dataset, get_d_in
+from torch.utils.data import DataLoader
+sns.set_theme()
+
 
 def summarise_experiment(experiment_data, incl_acc=False, incl_extras=False):
     """
@@ -42,11 +46,7 @@ def summarise_experiment(experiment_data, incl_acc=False, incl_extras=False):
 
     return experiment_summary
 
-<<<<<<< HEAD
-def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
-=======
 def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,descriptor='placeholder', in_notebook=True, fig_dir='plots/', layers = None):
->>>>>>> 89c83be (option to specify which layers to plot experiment results for)
     """
     Plots the mean and standard deviation of test loss (and optionally accuracy or extras (r2, spearman, pearson)) across transformer layers
     from an experiment summary.
@@ -85,11 +85,7 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,des
         ax[1].set(title='Probe test accuracy over layers', xlabel='Layer index', ylabel='Mean accuracy on test set')
         plt.tight_layout()
     elif incl_extras:
-<<<<<<< HEAD
         fig, ax = plt.subplots(4, figsize=(8,16)) # TODO: determine best figsize
-=======
-        fig, ax = plt.subplots(4, figsize=(8,16))
->>>>>>> 89c83be (option to specify which layers to plot experiment results for)
         ax[0].errorbar(experiment_summary['layer'], experiment_summary['loss_mean'], yerr=experiment_summary['loss_std'], marker='x')
         ax[0].set(title='Probe test loss over layers', xlabel='Layer index', ylabel='Mean loss on test set')
         ax[1].errorbar(experiment_summary['layer'], experiment_summary['r2_mean'], yerr=experiment_summary['r2_std'], marker='x')
@@ -112,28 +108,65 @@ def plot_from_summary(experiment_summary,  incl_acc=False, incl_extras=False,des
         plt.savefig(fig_path, dpi=300)
     return
 
-def plot_scalar_predictions(probe, test_dataloader, feature_descriptor, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
+def plot_scalar_predictions(probe, test_dataloader, ax, color, feature_descriptor, descriptor='placeholder', in_notebook=True, fig_dir='plots/'):
+    '''
+    Plots a probe's predictions agains ground truth, and computes the spearman coefficient
+    '''
     test_results, avg_test_loss = verbose_eval_regression_probe(probe, test_dataloader)
     probe_outputs = np.array([test_results[i][0] for i in range(len(test_results))], dtype=float)
     ground_truths = np.array([test_results[i][1] for i in range(len(test_results))], dtype=float)
-    fig, ax = plt.subplots(figsize=(8,8))
-    ax.scatter(ground_truths, probe_outputs, alpha=0.3, color='tab:blue')
+
+    ax.scatter(ground_truths, probe_outputs, alpha=0.3, color=color)
     gt_minimal_set = [min(ground_truths), max(ground_truths)]
     ax.plot(gt_minimal_set, gt_minimal_set, color='tab:red')
     ax.set(xlabel='Ground Truth', ylabel='Probe Prediction', title=f'{feature_descriptor} Prediction')
 
     spearman_corr, _ = spearmanr(ground_truths, probe_outputs)
     
-    plt.annotate(f"Spearman r={spearman_corr:.3f}",
-                xy=(0.95, 0.05),  # bottom-right in axes coords
-                xycoords='axes fraction',
-                ha='right', fontsize=10)
+    # plt.annotate(f"Spearman r={spearman_corr:.3f}",
+    #             xy=(0.95, 0.05),  # bottom-right in axes coords
+    #             xycoords='axes fraction',
+    #             ha='right', fontsize=10)
+
+    # plt.tight_layout()
+
+    # if in_notebook:
+    #     plt.show()
+    # else:
+    #     fig_path = f'{fig_dir}/regression_expt_plot_{descriptor}.png'
+    #     plt.savefig(fig_path, dpi=300)
+    return spearman_corr
+
+
+def plot_all_scalar_predictions(target_feature, feature_descriptor, descriptor, activations_path, probes_path, layers, num_repeats=1, r2_threshold=None, shuffle_datasets=True, data_split=[0.8, 0.1, 0.1]):
+
+  '''
+  Plot probe predictions against ground truth - creates one plot for each layer, and plots each repeat in a different colour. 
+  '''  
+  # Iterate over the specified layers
+  for layer_idx in layers:
+    full_dataset = ActivationsDataset(activations_path=activations_path, feature_label=target_feature, layer_idx=layer_idx, r2_threshold=r2_threshold)
+
+    train_dataset, val_dataset, test_dataset = split_dataset(full_dataset, lengths=data_split)
+    test_dataloader = DataLoader(test_dataset, shuffle=shuffle_datasets)
+    # Load the specified number of repeats
+    fig, ax = plt.subplots(figsize=(8,8))
+    for run in range(num_repeats):
+      print(f'Repeat {run} of layer {layer_idx}')
+      color = plt.rcParams['axes.prop_cycle'].by_key()['color'][run % 10]
+
+      d_in = get_d_in(full_dataset)
+
+      # Load probe based on expected naming format
+      probe_name = f'probe_{target_feature}_{layer_idx}_{run}.pt'
+      probe = load_probe_from_path(f'{probes_path}/{probe_name}', d_in=d_in)
+
+      spearman_corr = plot_scalar_predictions(probe, test_dataloader, ax, color, feature_descriptor, descriptor)
+
+      ax.annotate(f"Spearman r={spearman_corr:.3f}", xy=(0.95, 0.05 + run * 0.05),
+            xycoords='axes fraction', ha='right', fontsize=10,
+            color=color)
 
     plt.tight_layout()
-
-    if in_notebook:
-        plt.show()
-    else:
-        fig_path = f'{fig_dir}/regression_expt_plot_{descriptor}.png'
-        plt.savefig(fig_path, dpi=300)
-    return
+    plt.show()
+  return
