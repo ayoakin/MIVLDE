@@ -108,7 +108,7 @@ def plot_scalar_predictions(probe, test_dataloader, feature_descriptor, descript
     ground_truths = [test_results[i][1] for i in range(len(test_results))]
     fig, ax = plt.subplots(figsize=(8,8))
     ax.scatter(ground_truths, probe_outputs, alpha=0.3, color='tab:blue')
-    gt_minimal_set = [ground_truths[0], ground_truths[-1]]
+    gt_minimal_set = [min(ground_truths), max(ground_truths)]
     ax.plot(gt_minimal_set, gt_minimal_set, color='tab:red')
     ax.set(xlabel='Ground Truth', ylabel='Probe Prediction', title=f'{feature_descriptor} Prediction')
 
