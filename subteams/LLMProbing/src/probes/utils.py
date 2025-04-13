@@ -121,9 +121,13 @@ def verbose_eval_regression_probe(probe, dataloader):
       outputs = probe(acts)
       diff = (labels - outputs)
       square_errors = torch.square(diff).item()
-      for batch_idx in range(len(acts)):
-        datapoint = [outputs[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx]]
+      if len(acts) == 1:
+        datapoint = [outputs, labels, ids, square_errors]
         eval_results.append(datapoint)
+      else:
+        for batch_idx in range(len(acts)):
+          datapoint = [outputs[batch_idx], labels[batch_idx], ids[batch_idx], square_errors[batch_idx]]
+          eval_results.append(datapoint)
       total_loss += torch.square(diff).sum().item()
 
       total_preds += len(labels)
