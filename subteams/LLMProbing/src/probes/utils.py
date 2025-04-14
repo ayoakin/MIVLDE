@@ -4,6 +4,8 @@ import os
 from tqdm import tqdm
 from sklearn.metrics import r2_score
 from scipy.stats import spearmanr, pearsonr
+from torch.utils.data import DataLoader
+from sklearn.linear_model import Ridge
 from src.probes.lr_probe import LRProbe
 
 
@@ -329,6 +331,49 @@ def train_regression_probe(probe, train_dataloader, val_dataloader=None, \
         if write_log:
           val_f.write(f'Epoch {epoch+1} (Validation): Loss {avg_val_loss}\n')
   print(f'\nTraining Set (Epoch {epoch+1} - Final): Loss {avg_loss}')
+
+  return probe, losses, val_losses
+
+def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
+  '''
+  Train an instantiated regression probe using specified training and validation data.
+
+  Args:
+  - probe (LRProbe): (regression) probe to be trained
+  - train_dataset (src.datasets.ActivationsDataset): the full training dataset
+  - val_dataset (src.datasets.ActivationsDataset | bool, optional): the full validation dataset. Default is None
+
+  Returns:
+  - probe (LRProbe): a trained (regression) probe
+  - loss (float): list of losses at each epoch on the training set
+  - val_loss (float): list of losses at each epoch on the validation set
+  '''
+
+  losses = []
+  val_losses = []
+
+  train_dataloader = DataLoader(train_dataset)
+  if val_dataset is not None:
+    val_dataloader = DataLoader(val_dataset)
+
+  # Initial performance
+  e0_train_loss = eval_regression_probe(probe, train_dataloader)
+  losses.append(e0_train_loss)
+  if val_dataset is not None:
+    e0_val_loss = eval_regression_probe(probe, val_dataloader)
+    val_losses.append(e0_val_loss)
+
+  # TODO: use sklearn.linear_model.Ridge here
+
+  acts, labels, ids = train_dataset[:]
+
+  sklearn_probe = Ridge(alpha=0.01, fit_intercept=False)
+  sklearn_probe.fit(acts, labels)
+
+  coeffs = sklearn_probe.coef_
+
+  with torch.no_grad():
+    probe.hidden.copy_(torch.tensor(coeffs).unsqueeze(1))  # Shape (d_in, 1)
 
   return probe, losses, val_losses
 
