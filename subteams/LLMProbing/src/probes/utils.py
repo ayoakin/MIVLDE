@@ -381,7 +381,7 @@ def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
   coeffs = sklearn_probe.coef_
 
   with torch.no_grad():
-    probe.hidden.copy_(torch.tensor(coeffs).unsqueeze(1))  # Shape (d_in, 1)
+    probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(1))  # Shape (d_in, 1)
 
   return probe, losses, val_losses
 
