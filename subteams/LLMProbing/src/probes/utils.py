@@ -1,6 +1,7 @@
 import torch
 import datetime
 import os
+import numpy as np
 from tqdm import tqdm
 from sklearn.metrics import r2_score
 from scipy.stats import spearmanr, pearsonr
