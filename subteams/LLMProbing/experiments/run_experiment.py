@@ -1,5 +1,6 @@
 import os
 import pandas as pd
+from tqdm import tqdm
 from torch.utils.data import DataLoader
 from src.datasets.activations_dataset import ActivationsDataset, R2ActivationsDataset
 from src.datasets.utils import split_dataset, get_d_in
@@ -478,7 +479,7 @@ def scalar_prediction_experiment_w_solver(target_feature, activations_path, \
   experiment_data = []
 
   # Iterate over the specified layers
-  for layer_idx in layers:
+  for layer_idx in tqdm(layers, desc='\nTraining on each layer'):
     # Set probe name for saving
     probe_name = f'probe_{target_feature}_{layer_idx}_{0}.pt'
     
