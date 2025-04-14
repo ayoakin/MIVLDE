@@ -368,8 +368,8 @@ def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
   acts, labels, ids = [], [], []
   for i in range(len(train_dataset)):
       act, label, id = train_dataset[i]
-      acts.append(act)
-      labels.append(label)
+      acts.append(act.numpy())
+      labels.append(label.item())
       ids.append(id)
 
   acts = np.array(acts)  # Convert to numpy arrays if needed
