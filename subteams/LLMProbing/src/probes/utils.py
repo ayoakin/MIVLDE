@@ -363,9 +363,16 @@ def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
     e0_val_loss = eval_regression_probe(probe, val_dataloader)
     val_losses.append(e0_val_loss)
 
-  # TODO: use sklearn.linear_model.Ridge here
+  # Iterate through the dataset using indices:
+  acts, labels, ids = [], [], []
+  for i in range(len(train_dataset)):
+      act, label, id = train_dataset[i]
+      acts.append(act)
+      labels.append(label)
+      ids.append(id)
 
-  acts, labels, ids = train_dataset[:]
+  acts = np.array(acts)  # Convert to numpy arrays if needed
+  labels = np.array(labels)
 
   sklearn_probe = Ridge(alpha=0.01, fit_intercept=False)
   sklearn_probe.fit(acts, labels)
