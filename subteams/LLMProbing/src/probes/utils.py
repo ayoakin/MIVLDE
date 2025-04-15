@@ -82,12 +82,11 @@ def eval_solver_classifier_probe(probe, dataset):
     acts, labels, ids = [], [], []
     for i in range(len(dataset)):
         act, label, id = dataset[i]
-        acts.append(act.numpy())
+        acts.append(torch.tensor(act))
         labels.append(label.item())
         ids.append(id)
 
-    acts = np.array(acts)  # Convert to numpy arrays
-    labels = np.array(labels)
+    acts = torch.tensor(acts)
     # Transform labels from {0,1} to {-1,1} to correspond with scikit-learn probe
     labels = 2.0 * labels - 1
     
