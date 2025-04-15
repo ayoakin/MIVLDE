@@ -6,7 +6,7 @@ from tqdm import tqdm
 from sklearn.metrics import r2_score
 from scipy.stats import spearmanr, pearsonr
 from torch.utils.data import DataLoader
-from sklearn.linear_model import Ridge
+from sklearn.linear_model import Ridge, RidgeClassifier
 from src.probes.lr_probe import LRProbe
 
 
@@ -52,6 +52,63 @@ def eval_classifier_probe(probe, dataloader):
     accuracy = (correct / total_preds).item()
     avg_loss = total_loss / total_preds
     return avg_loss, accuracy, fail_ids
+  
+def eval_solver_classifier_probe(probe, dataset):
+  '''
+  Evaluate a given probe on a specified dataset (via its corresponding dataloader)
+  which was trained using the direct solver.
+
+  Args:
+  - probe (LRProbe): (classifier) probe to be evaluated, trained using the direct solver
+  - dataset (src.datasets.ActivationsDataset): dataset on which the probe is to be evaluated
+
+  Returns:
+  - avg_loss (float): average loss (BCEWithLogitsLoss) on the given dataset
+  - accuracy (float): accuracy of the probe on the given dataset
+  - fail_ids (list(str)): IDs of datapoints which the probe fails to classify correctly
+  '''
+  with torch.no_grad():
+    total_loss = 0
+    correct = 0
+    total_preds = 0
+    criterion = torch.nn.MSELoss(reduction='sum')
+    # Corresponds to training objective in scikit-learn for RidgeClassifier (linear least squares)
+
+    probe.eval()
+
+    fail_ids = []
+
+    # Iterate through the dataset using indices:
+    acts, labels, ids = [], [], []
+    for i in range(len(dataset)):
+        act, label, id = dataset[i]
+        acts.append(act.numpy())
+        labels.append(label.item())
+        ids.append(id)
+
+    acts = np.array(acts)  # Convert to numpy arrays
+    labels = np.array(labels)
+    # Transform labels from {0,1} to {-1,1} to correspond with scikit-learn probe
+    labels = 2.0 * labels - 1
+    
+    outputs = probe(acts)
+    loss = criterion(outputs, labels)
+    total_loss += loss.item()
+
+    pred_labels = ((outputs + 1.0) / 2.0).round()
+    correct += (pred_labels == labels).float().sum()
+    total_preds += len(labels)
+
+    fail_mask = (pred_labels != labels)
+    fail_indices = fail_mask.nonzero()
+
+    batch_fail_ids = [ids[fail_idx] for fail_idx in fail_indices]
+    fail_ids += batch_fail_ids
+
+    accuracy = (correct / total_preds).item()
+    avg_loss = total_loss / total_preds
+  
+  return avg_loss, accuracy, fail_ids
   
 def eval_regression_probe(probe, dataloader):
   '''
@@ -245,6 +302,75 @@ def train_classifier_probe(probe, train_dataloader, val_dataloader=None, \
 
   return probe, losses, accuracies, val_losses, val_accuracies
 
+def train_classifier_probe_w_solver(probe, train_dataset, val_dataset=None):
+  '''
+  Train an instantiated classifier probe using specified training and validation data.
+
+  Args:
+  - probe (LRProbe): (classifier) probe to be trained
+  - train_dataset (src.datasets.ActivationsDataset): the full training dataset
+  - val_dataset (src.datasets.ActivationsDataset | bool, optional): the full validation dataset. Default is None
+
+  Returns:
+  - probe (LRProbe): a trained (classifier) probe
+  - losses (list(float)): list of losses at each epoch on the training set
+  - accuracies (list(float)): list of accuracies at each epoch on the training set
+  - val_losses (list(float)): list of losses at each epoch on the validation set
+  - val_accuracies (list(float)): list of accuracies at each epoch on the validation set
+  '''
+
+  losses = []
+  accuracies = []
+  val_losses = []
+  val_accuracies = []
+
+  # Iterate through the dataset using indices:
+  acts, labels, ids = [], [], []
+  for i in range(len(train_dataset)):
+      act, label, id = train_dataset[i]
+      acts.append(act.numpy())
+      labels.append(label.item())
+      ids.append(id)
+
+  # Initial performance
+  e0_train_loss, e0_train_acc, e0_train_fail_ids = eval_solver_classifier_probe(probe, train_dataset)
+  losses.append(e0_train_loss)
+  accuracies.append(e0_train_acc)
+  if val_dataset is not None:
+    e0_val_loss, e0_val_acc, e0_val_fail_ids = eval_solver_classifier_probe(probe, val_dataset)
+    val_losses.append(e0_val_loss)
+    val_accuracies.append(e0_val_acc)
+
+  # Iterate through the dataset using indices:
+  acts, labels, ids = [], [], []
+  for i in range(len(train_dataset)):
+      act, label, id = train_dataset[i]
+      acts.append(act.numpy())
+      labels.append(label.item())
+      ids.append(id)
+
+  acts = np.array(acts)  # Convert to numpy arrays
+  labels = np.array(labels)
+
+  sklearn_classifier_probe = RidgeClassifier(alpha=0.01, fit_intercept=False)
+  sklearn_classifier_probe.fit(acts, labels)
+
+  coeffs = sklearn_classifier_probe.coef_
+
+  with torch.no_grad():
+    probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(0))
+
+  # Trained performance
+  e1_train_loss, e1_train_acc, e1_train_fail_ids = eval_solver_classifier_probe(probe, train_dataset)
+  losses.append(e1_train_loss)
+  accuracies.append(e1_train_acc)
+  if val_dataset is not None:
+    e1_val_loss, e1_val_acc, e1_val_fail_ids = eval_solver_classifier_probe(probe, val_dataset)
+    val_losses.append(e1_val_loss)
+    val_accuracies.append(e1_val_acc)
+
+  return probe, losses, accuracies, val_losses, val_accuracies
+
 def train_regression_probe(probe, train_dataloader, val_dataloader=None, \
                            lr=0.01, num_epochs=20, device='cpu', \
                            logs_path='/content/drive/MyDrive/aisc/logs', write_log=False):
@@ -358,10 +484,10 @@ def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
     val_dataloader = DataLoader(val_dataset)
 
   # Initial performance
-  e0_train_loss = eval_regression_probe(probe, train_dataloader)
+  e0_train_loss, e0_train_r2, e0_train_spearman, e0_train_pearson = eval_regression_probe(probe, train_dataloader)
   losses.append(e0_train_loss)
   if val_dataset is not None:
-    e0_val_loss = eval_regression_probe(probe, val_dataloader)
+    e0_val_loss, e0_val_r2, e0_val_spearman, e0_val_pearson = eval_regression_probe(probe, val_dataloader)
     val_losses.append(e0_val_loss)
 
   # Iterate through the dataset using indices:
@@ -382,6 +508,13 @@ def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
 
   with torch.no_grad():
     probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(0))
+
+  # Trained performance
+  e1_train_loss, e1_train_r2, e1_train_spearman, e1_train_pearson = eval_regression_probe(probe, train_dataloader)
+  losses.append(e1_train_loss)
+  if val_dataset is not None:
+    e1_val_loss, e1_val_r2, e1_val_spearman, e1_val_pearson = eval_regression_probe(probe, val_dataloader)
+    val_losses.append(e1_val_loss)
 
   return probe, losses, val_losses
 
