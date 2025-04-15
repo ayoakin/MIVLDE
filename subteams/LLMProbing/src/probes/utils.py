@@ -79,30 +79,32 @@ def eval_solver_classifier_probe(probe, dataset):
     fail_ids = []
 
     # Iterate through the dataset using indices:
-    acts, labels, ids = [], [], []
-    for i in range(len(dataset)):
-        act, label, id = dataset[i]
-        acts.append(torch.tensor(act))
-        labels.append(label.item())
-        ids.append(id)
+    # acts, labels, ids = [], [], []
+    # for i in range(len(dataset)):
+    #     act, label, id = dataset[i]
+    #     acts.append(torch.tensor(act))
+    #     labels.append(label.item())
+    #     ids.append(id)
 
-    acts = torch.tensor(acts)
-    # Transform labels from {0,1} to {-1,1} to correspond with scikit-learn probe
-    labels = 2.0 * labels - 1
-    
-    outputs = probe(acts)
-    loss = criterion(outputs, labels)
-    total_loss += loss.item()
+    dataloader = DataLoader(dataset, batch_size=len(dataset))
 
-    pred_labels = ((outputs + 1.0) / 2.0).round()
-    correct += (pred_labels == labels).float().sum()
-    total_preds += len(labels)
+    for acts, labels, ids in dataloader:
+      # Transform labels from {0,1} to {-1,1} to correspond with scikit-learn probe
+      sk_labels = 2.0 * labels - 1.0
+      
+      outputs = probe(acts)
+      loss = criterion(outputs, sk_labels)
+      total_loss += loss.item()
 
-    fail_mask = (pred_labels != labels)
-    fail_indices = fail_mask.nonzero()
+      pred_labels = ((outputs + 1.0) / 2.0).round()
+      correct += (pred_labels == labels).float().sum()
+      total_preds += len(labels)
 
-    batch_fail_ids = [ids[fail_idx] for fail_idx in fail_indices]
-    fail_ids += batch_fail_ids
+      fail_mask = (pred_labels != labels)
+      fail_indices = fail_mask.nonzero()
+
+      batch_fail_ids = [ids[fail_idx] for fail_idx in fail_indices]
+      fail_ids += batch_fail_ids
 
     accuracy = (correct / total_preds).item()
     avg_loss = total_loss / total_preds
@@ -323,14 +325,6 @@ def train_classifier_probe_w_solver(probe, train_dataset, val_dataset=None):
   val_losses = []
   val_accuracies = []
 
-  # Iterate through the dataset using indices:
-  acts, labels, ids = [], [], []
-  for i in range(len(train_dataset)):
-      act, label, id = train_dataset[i]
-      acts.append(act.numpy())
-      labels.append(label.item())
-      ids.append(id)
-
   # Initial performance
   e0_train_loss, e0_train_acc, e0_train_fail_ids = eval_solver_classifier_probe(probe, train_dataset)
   losses.append(e0_train_loss)
@@ -340,33 +334,32 @@ def train_classifier_probe_w_solver(probe, train_dataset, val_dataset=None):
     val_losses.append(e0_val_loss)
     val_accuracies.append(e0_val_acc)
 
-  # Iterate through the dataset using indices:
-  acts, labels, ids = [], [], []
-  for i in range(len(train_dataset)):
-      act, label, id = train_dataset[i]
-      acts.append(act.numpy())
-      labels.append(label.item())
-      ids.append(id)
+  train_dataloader = DataLoader(train_dataset, batch_size=len(train_dataset))
 
-  acts = np.array(acts)  # Convert to numpy arrays
-  labels = np.array(labels)
+  # There should only be one batch since the batch size is set to the length
+  for acts, labels, ids in train_dataloader:
+    acts = acts.numpy()
+    labels = labels.numpy()
 
-  sklearn_classifier_probe = RidgeClassifier(alpha=0.01, fit_intercept=False)
-  sklearn_classifier_probe.fit(acts, labels)
+    sklearn_classifier_probe = RidgeClassifier(alpha=0.01, fit_intercept=False)
+    sklearn_classifier_probe.fit(acts, labels)
 
-  coeffs = sklearn_classifier_probe.coef_
+    coeffs = sklearn_classifier_probe.coef_
 
-  with torch.no_grad():
-    probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(0))
+    with torch.no_grad():
+      probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(0))
 
-  # Trained performance
-  e1_train_loss, e1_train_acc, e1_train_fail_ids = eval_solver_classifier_probe(probe, train_dataset)
-  losses.append(e1_train_loss)
-  accuracies.append(e1_train_acc)
-  if val_dataset is not None:
-    e1_val_loss, e1_val_acc, e1_val_fail_ids = eval_solver_classifier_probe(probe, val_dataset)
-    val_losses.append(e1_val_loss)
-    val_accuracies.append(e1_val_acc)
+    # Trained performance
+    e1_train_loss, e1_train_acc, e1_train_fail_ids = eval_solver_classifier_probe(probe, train_dataset)
+    losses.append(e1_train_loss)
+    accuracies.append(e1_train_acc)
+    if val_dataset is not None:
+      e1_val_loss, e1_val_acc, e1_val_fail_ids = eval_solver_classifier_probe(probe, val_dataset)
+      val_losses.append(e1_val_loss)
+      val_accuracies.append(e1_val_acc)
+
+    # Break in case there are more batches...
+    break
 
   return probe, losses, accuracies, val_losses, val_accuracies
 
@@ -489,31 +482,30 @@ def train_regression_probe_w_solver(probe, train_dataset, val_dataset=None):
     e0_val_loss, e0_val_r2, e0_val_spearman, e0_val_pearson = eval_regression_probe(probe, val_dataloader)
     val_losses.append(e0_val_loss)
 
-  # Iterate through the dataset using indices:
-  acts, labels, ids = [], [], []
-  for i in range(len(train_dataset)):
-      act, label, id = train_dataset[i]
-      acts.append(act.numpy())
-      labels.append(label.item())
-      ids.append(id)
+  train_dataloader = DataLoader(train_dataset, batch_size=len(train_dataset))
 
-  acts = np.array(acts)  # Convert to numpy arrays if needed
-  labels = np.array(labels)
+  # There should only be one batch since the batch size is set to the length
+  for acts, labels, ids in train_dataloader:
+    acts = acts.numpy()
+    labels = labels.numpy()
 
-  sklearn_probe = Ridge(alpha=0.01, fit_intercept=False)
-  sklearn_probe.fit(acts, labels)
+    sklearn_probe = Ridge(alpha=0.01, fit_intercept=False)
+    sklearn_probe.fit(acts, labels)
 
-  coeffs = sklearn_probe.coef_
+    coeffs = sklearn_probe.coef_
 
-  with torch.no_grad():
-    probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(0))
+    with torch.no_grad():
+      probe.hidden.weight.copy_(torch.tensor(coeffs).unsqueeze(0))
 
-  # Trained performance
-  e1_train_loss, e1_train_r2, e1_train_spearman, e1_train_pearson = eval_regression_probe(probe, train_dataloader)
-  losses.append(e1_train_loss)
-  if val_dataset is not None:
-    e1_val_loss, e1_val_r2, e1_val_spearman, e1_val_pearson = eval_regression_probe(probe, val_dataloader)
-    val_losses.append(e1_val_loss)
+    # Trained performance
+    e1_train_loss, e1_train_r2, e1_train_spearman, e1_train_pearson = eval_regression_probe(probe, train_dataloader)
+    losses.append(e1_train_loss)
+    if val_dataset is not None:
+      e1_val_loss, e1_val_r2, e1_val_spearman, e1_val_pearson = eval_regression_probe(probe, val_dataloader)
+      val_losses.append(e1_val_loss)
+
+    # Break in case there are more batches...
+    break
 
   return probe, losses, val_losses
 
