@@ -6,7 +6,8 @@ from src.datasets.activations_dataset import ActivationsDataset, R2ActivationsDa
 from src.datasets.utils import split_dataset, get_d_in
 from src.probes.lr_probe import LRProbe
 from src.probes.utils import train_classifier_probe, train_regression_probe, eval_classifier_probe, \
-  eval_regression_probe, save_probe_to_path, load_probe_from_path, train_regression_probe_w_solver
+  eval_regression_probe, save_probe_to_path, load_probe_from_path, train_regression_probe_w_solver, \
+  train_classifier_probe_w_solver, eval_solver_classifier_probe
 
 # TODO: fix val_loss etc. when use_val = False
 
@@ -14,7 +15,7 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
                                          probe_name, probes_path, \
                                          lr, num_epochs, \
                                          r2_threshold=None, \
-                                         shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False):
+                                         shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1], write_log=False, use_solver=False):
   """
   Trains a logistic regression probe on activations from a specified transformer layer 
   to classify a target binary feature. The trained probe is then evaluated and saved.
@@ -54,13 +55,22 @@ def train_and_save_probe_separation_expt(target_layer_idx, target_feature, activ
   probe = LRProbe(d_in)
 
   # Training loop
-  if use_val:
-    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs, val_dataloader=val_dataloader)
+  if use_solver:
+    if use_val:
+      probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe_w_solver(probe, train_dataset, val_dataset=val_dataset)
+    else:
+      probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe_w_solver(probe, train_dataset, val_dataset=val_dataset)
   else:
-    probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
+    if use_val:
+      probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs, val_dataloader=val_dataloader)
+    else:
+      probe, train_losses, train_accuracies, val_losses, val_accuracies = train_classifier_probe(probe, train_dataloader, lr=lr, write_log=write_log, num_epochs=num_epochs)
 
   # Evaluation on test set
-  test_loss, test_acc, test_fail_ids = eval_classifier_probe(probe, test_dataloader)
+  if use_solver:
+    test_loss, test_acc, test_fail_ids = eval_solver_classifier_probe(probe, test_dataset)
+  else:
+    test_loss, test_acc, test_fail_ids = eval_classifier_probe(probe, test_dataloader)
   print(f'Probe trained on layer {target_layer_idx}: Test Set Loss {test_loss}, Test Set Accuracy {test_acc}')
 
   # Save probe
@@ -146,6 +156,71 @@ def separability_testing(target_feature, activations_path, \
             "final_val_loss": final_val_loss,
             "final_val_accuracy": final_val_acc
         })
+
+  experiment_data = pd.DataFrame(data=experiment_data)
+
+  return experiment_data
+
+def separability_testing_w_solver(target_feature, activations_path, \
+                         probes_path, \
+                         layers, \
+                         r2_threshold=None, \
+                         shuffle_datasets = True, use_val = True, data_split=[0.8, 0.1, 0.1]):
+  """
+  Trains and evaluates logistic regression probes on activations from a specified list of transformer layers 
+  to test feature separability. Probe training is done using a direct solver from scikit-learn.
+
+  Args:
+  - target_feature (str): The binary feature to be classified by the probes.
+  - activations_path (str): Path to the directory containing activation files.
+  - probes_path (str): Path where trained probes should be saved.
+  - layers (list of int): List of layer indices to train probes on.
+  - shuffle_datasets (bool, optional): Whether to shuffle the datasets when creating dataloaders. Default is True.
+  - use_val (bool, optional): Whether to use a validation dataset during training. Default is True.
+  - data_split (list of float, optional): Proportions for splitting dataset into train, val, and test. Default is [0.8, 0.1, 0.1].
+
+  Returns:
+  - experiment_data (pd.DataFrame): A DataFrame containing results for each layer and run, with the following columns:
+    - "layer" (int): Transformer layer index.
+    - "test_loss" (float): Loss on the test dataset.
+    - "test_accuracy" (float): Accuracy on the test dataset.
+    - "test_fail_ids" (list): List of sample IDs that were incorrectly classified in the test set.
+    - "final_train_loss" (float): Final training loss after the last epoch.
+    - "final_train_accuracy" (float): Final training accuracy after the last epoch.
+    - "final_val_loss" (float or None): Final validation loss after the last epoch (None if `use_val=False`).
+    - "final_val_accuracy" (float or None): Final validation accuracy after the last epoch (None if `use_val=False`).
+
+  Notes:
+  - This function iterates over the specified `layers` and trains a probe for each one.
+  - Results are stored in a DataFrame for further analysis.
+  """
+
+  experiment_data = []
+
+  # Iterate over the specified layers
+  for layer_idx in layers:
+    # Set probe name for saving
+    probe_name = f'probe_{target_feature}_{layer_idx}_{0}.pt'
+    
+    # Train and save the probe for the correct layer
+    test_loss, test_acc, test_fail_ids, final_train_loss, final_train_acc, \
+      final_val_loss, final_val_acc = train_and_save_probe_separation_expt(target_layer_idx=layer_idx, target_feature=target_feature, activations_path=activations_path, \
+        probe_name=probe_name, probes_path=probes_path, \
+        lr=1, num_epochs=1, \
+        r2_threshold=r2_threshold, \
+        shuffle_datasets=shuffle_datasets, use_val=use_val, data_split=data_split, use_solver=True)
+
+    # Add relevant data to the experiment results
+    experiment_data.append({
+          "layer": layer_idx,
+          "test_loss": test_loss,
+          "test_accuracy": test_acc,
+          "test_fail_ids": test_fail_ids,
+          "final_train_loss": final_train_loss,
+          "final_train_accuracy": final_train_acc,
+          "final_val_loss": final_val_loss,
+          "final_val_accuracy": final_val_acc
+      })
 
   experiment_data = pd.DataFrame(data=experiment_data)
 
