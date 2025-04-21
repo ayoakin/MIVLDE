@@ -182,12 +182,12 @@ class ManualSamplesGenerator():
     num_samples = len(c_values) * len(t0_values)
     print(f'\n[INFO] Data generation complete. Saved {num_samples} hyperbolic samples to {self.samples_path}')
   
-  def generate_sigmoid_samples(self, a_values, b_values, t0, nt_min, nt_max):
+  def generate_sigmoid_samples(self, a_values, b_values, t0_values, nt_min, nt_max):
     '''
     Random number of timepoints, or set nt_max=nt_min if you want to fix the number of timepoints
     '''
     manual_samples = []
-    for a, b in itertools.product(a_values, b_values, desc='Generating sigmoid samples'):
+    for a, b, t0 in itertools.product(a_values, b_values, t0_values, desc='Generating sigmoid samples'):
       nt = random.randint(nt_min, nt_max)
       t_values = np.linspace(1, 10, nt)
       trajectory = (a/(1+np.exp(b*(t0 - t_values)))).reshape(-1, 1)
@@ -196,7 +196,7 @@ class ManualSamplesGenerator():
           'times': t_values,
           'trajectory': trajectory,
           'parameters': {'a': float(a), 'b': float(b), 't0' : float(t0)},
-          'feature_dict': {"exponential": 0, "hyperbolic": 0, "sigmoid": 1, "derivative_max" : float(derivative_max)},
+          'feature_dict': {"exponential": 0, "hyperbolic": 0, "sigmoid": 1, "derivative_max" : float(derivative_max), "inflection_time": float(t0)},
           'expression': self.clean_expression(f"{a} / (1+exp({b}*({t0}-t)))")
       }
       manual_samples.append(sample_dict)
