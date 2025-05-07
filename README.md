@@ -8,7 +8,7 @@ We present intermediate findings from our project, **“Mechanistic Interpretabi
 
 Instead of language models, we focus on **mathematical transformers** that predict or infer underlying differential equations. Our hypothesis: this structured, formal setting makes it easier to probe and interpret the model’s internal representations.
 
-Preliminary results show patterns reminiscent of **numerical differentiation** emerging in the model’s activations — suggesting the transformer learns meaningful internal abstractions. We're excited to continue validating and extending these results.
+Preliminary results show patterns reminiscent of **numerical differentiation** emerging in the model’s activations - suggesting the transformer learns meaningful internal abstractions. We're excited to continue validating and extending these results.
 
 ---
 
@@ -61,7 +61,7 @@ While we’re not directly analyzing language models, there are three reasons th
    If transformers naturally learn mathematical structure from real-world data, then we should see similar patterns in LLMs too.
 
 3. **Fundamental understanding is long-term leverage**  
-   Just like electromagnetism theory preceded its applications, interpretability might pay off later — if we understand the “gears” of these models now.
+   Just like electromagnetism theory preceded its applications, interpretability might pay off later - if we understand the “gears” of these models now.
 
 ---
 
