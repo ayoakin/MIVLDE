@@ -1,12 +1,10 @@
 # 🧠 Mechanistic Interpretability via Learning Differential Equations
 
-> Intermediate Report — AI Safety Camp Project
-
 ---
 
 ## 📌 TL;DR
 
-We present intermediate findings from our AI Safety Camp project, **“Mechanistic Interpretability Via Learning Differential Equations.”** Our goal is to better understand transformers by studying their internal computation when processing **time-series numerical data**.
+We present intermediate findings from our project, **“Mechanistic Interpretability Via Learning Differential Equations.”** Our goal is to better understand transformers by studying internal computation of toy models like the ODEformer and Time-Series Transformer when processing **time-series numerical data**.
 
 Instead of language models, we focus on **mathematical transformers** that predict or infer underlying differential equations. Our hypothesis: this structured, formal setting makes it easier to probe and interpret the model’s internal representations.
 
@@ -45,6 +43,7 @@ This cleaner setup makes it easier to reverse-engineer what the transformer is *
   - **Logit lens**
   - **Attention pattern analysis**
   - **Activation probing**
+  - **Sparse-Autoencoders**
 - 🧭 Key insight: **Activation patterns in ODEFormer resemble numerical derivative estimation**, suggesting internal computation aligns with the ground truth algorithm
 
 We’re now exploring whether these features are robust and generalizable, and which layers and attention heads contribute to them.
