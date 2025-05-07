@@ -69,8 +69,15 @@ While we’re not directly analyzing language models, there are three reasons th
 
 ```bash
 .
-├── models/               # ODEFormer & Time Series Transformer code
+├── data/               # ODEFormer & Time Series Transformer training and test data
+├── docs/            # documentation
 ├── notebooks/            # Probing experiments & visualizations
-├── scripts/              # Training & data preprocessing pipelines
 ├── results/              # Intermediate findings, charts, logs
+├── scripts/              # Training & data preprocessing pipelines
+├── subteams/              # find work relating to particular techniques
+  ├── ActivationMaximazation/           
+  ├── LLMProbing/             
+  ├── LogitLens/              
+  ├── SAEs/            
+  ├── SHAP/              
 └── README.md             # You are here :)
