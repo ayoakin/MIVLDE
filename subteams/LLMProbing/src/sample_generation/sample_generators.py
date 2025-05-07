@@ -3,6 +3,7 @@ import numpy as np
 import pickle
 from tqdm import tqdm
 from tqdm.contrib import itertools
+import random
 try:
     from odeformer.envs.environment import FunctionEnvironment
     from parsers import get_parser
@@ -144,11 +145,14 @@ class ManualSamplesGenerator():
 
     for c_val, a_val in itertools.product(c_values, a_values, desc='Generating exponential samples'):
       trajectory = (c_val * np.exp(-a_val * t_values)).reshape(-1, 1)
+      derivative = (-a_val * c_val * np.exp(-a_val * t_values))
+      derivative_0 = derivative[0]
+      derivative_3 = derivative[3]
       sample_dict = {
           'times': t_values,
           'trajectory': trajectory,
           'parameters': {'a': float(a_val), 'c': float(c_val)}, # Convert to float for better serialization
-          'feature_dict': {"exponential": 1, "hyperbolic": 0},
+          'feature_dict': {"exponential": 1, "hyperbolic": 0, 'derivative_0' : float(derivative_0), 'derivative_3' : float(derivative_3)},
           'expression': self.clean_expression(f"{c_val} * np.exp(-{a_val} * t)")
       }
       manual_samples.append(sample_dict)
@@ -162,11 +166,14 @@ class ManualSamplesGenerator():
 
     for c_val, t0_val in itertools.product(c_values, t0_values, desc='Generating hyperbolic samples'):
       trajectory = (c_val / (t0_val - t_values)).reshape(-1, 1)
+      derivative = (c_val / (t0_val - t_values)**2)
+      derivative_0 = derivative[0]
+      derivative_3 = derivative[3]
       sample_dict = {
           'times': t_values,
           'trajectory': trajectory,
           'parameters': {'t0': float(t0_val), 'c': float(c_val)}, # Convert to float for better serialization
-          'feature_dict': {"exponential": 0, "hyperbolic": 1},
+          'feature_dict': {"exponential": 0, "hyperbolic": 1, "derivative_0" : float(derivative_0), 'derivative_3' : float(derivative_3)},
           'expression': self.clean_expression(f"{c_val} / ({t0_val} - t)")
       }
       manual_samples.append(sample_dict)
@@ -174,3 +181,26 @@ class ManualSamplesGenerator():
     self.save_generated_samples(manual_samples, template='sample_hyp_')
     num_samples = len(c_values) * len(t0_values)
     print(f'\n[INFO] Data generation complete. Saved {num_samples} hyperbolic samples to {self.samples_path}')
+  
+  def generate_sigmoid_samples(self, a_values, b_values, t0_values, nt_min, nt_max):
+    '''
+    Random number of timepoints, or set nt_max=nt_min if you want to fix the number of timepoints
+    '''
+    manual_samples = []
+    for a, b, t0 in itertools.product(a_values, b_values, t0_values, desc='Generating sigmoid samples'):
+      nt = random.randint(nt_min, nt_max)
+      t_values = np.linspace(1, 10, nt)
+      trajectory = (a/(1+np.exp(b*(t0 - t_values)))).reshape(-1, 1)
+      derivative_max = a * b / 4
+      sample_dict = {
+          'times': t_values,
+          'trajectory': trajectory,
+          'parameters': {'a': float(a), 'b': float(b), 't0' : float(t0)},
+          'feature_dict': {"exponential": 0, "hyperbolic": 0, "sigmoid": 1, "derivative_max" : float(derivative_max), "inflection_time": float(t0)},
+          'expression': self.clean_expression(f"{a} / (1+exp({b}*({t0}-t)))")
+      }
+      manual_samples.append(sample_dict)
+    self.save_generated_samples(manual_samples, template='sample_sig_')
+    num_samples = len(a_values) * len(b_values)
+    print(f'\n[INFO] Data generation complete. Saved {num_samples} sigmoid samples to {self.samples_path}')
+    

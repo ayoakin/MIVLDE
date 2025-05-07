@@ -1,7 +1,7 @@
 import torch
 from torch.utils.data import random_split
 
-def split_dataset(dataset, lengths=[0.8, 0.0, 0.2], seed=None):
+def split_dataset(dataset, lengths=[0.8, 0.0, 0.2], seed=42):
   '''
   Split into training, validation, and testing datasets
   Default is to have no validation dataset (i.e. empty) and randomized splitting
