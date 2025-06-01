@@ -1,0 +1,1 @@
+from .injection_seq import inject_and_pass
